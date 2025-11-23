@@ -11,6 +11,7 @@ export default function WithdrawModal({ onClose }) {
   const [balance, setBalance] = useState({ usd: 0, mxn: 0, usdt: 0 })
   const [records, setRecords] = useState([])
   const [error, setError] = useState('')
+  const [toast, setToast] = useState({ show:false, text:'', type:'ok' })
 
   useEffect(() => { loadRecords() }, [])
   async function loadRecords() { try { const r = await meWithdrawList(); setRecords(r.items || []) } catch {} }
@@ -28,6 +29,8 @@ export default function WithdrawModal({ onClose }) {
       await meWithdrawCreate(payload)
       await loadRecords()
       setAmount('')
+      setToast({ show:true, text:'提现申请已提交', type:'ok' })
+      setTimeout(() => { setToast({ show:false, text:'', type:'ok' }); try { onClose && onClose() } catch {} }, 1000)
     } catch (e) { setError(e?.message || '提交失败') }
   }
 
@@ -41,6 +44,11 @@ export default function WithdrawModal({ onClose }) {
           <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
+          {toast.show && (
+            <div style={{ position:'fixed', top:10, left:0, right:0, display:'grid', placeItems:'center', zIndex:1000 }}>
+              <div className={`top-toast ${toast.type}`}>{toast.text}</div>
+            </div>
+          )}
           <label>币种</label>
           <select value={currency} onChange={onCurrencyChange}>
             <option value="USD">USD</option>

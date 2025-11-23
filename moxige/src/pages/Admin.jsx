@@ -39,6 +39,15 @@ export default function Admin() {
       if (path.endsWith('/admin/chognzhi')) setActive('funds-recharge');
       else if (path.endsWith('/admin/zijin')) setActive('funds-logs');
       else if (path.endsWith('/admin/withdraws')) setActive('funds-withdraws');
+      const isBrowser = typeof location !== 'undefined';
+      const port = isBrowser ? String(location.port || '') : '';
+      const host = isBrowser ? String(location.hostname || '') : '';
+      const isDevLocal = isBrowser && (port === '5174' || port === '5173') && (host === 'localhost' || host === '127.0.0.1');
+      if (isDevLocal) {
+        try { localStorage.removeItem('api:base:override'); } catch {}
+        try { localStorage.removeItem('api:base'); } catch {}
+        api.setBase('http://127.0.0.1:5210');
+      }
     } catch {}
   }, []);
 
@@ -202,6 +211,11 @@ export default function Admin() {
     }
   };
   useEffect(() => { if (!isAuthed) return; refreshUsers(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [isAuthed, usersPage, usersPageSize]);
+  useEffect(() => {
+    if (!isAuthed || usersTab !== 'list') return;
+    let timer = setInterval(() => { refreshUsers(); }, 8000);
+    return () => { try { clearInterval(timer); } catch {} };
+  }, [isAuthed, usersTab, usersPage, usersPageSize, q, assignFilter]);
 
   const customerList = useMemo(() => {
     let list = backendUsers
@@ -872,6 +886,7 @@ function PositionsPage() {
               <div className="nav-sub">
                 <button className={`nav-item ${active === "settings-trading" ? "active" : ""}`} onClick={() => setActive("settings-trading")}>交易时间限制</button>
                 <button className={`nav-item ${active === "settings-invite" ? "active" : ""}`} onClick={() => setActive("settings-invite")}>邀请系统设置</button>
+                <button className={`nav-item ${active === "invite-commissions" ? "active" : ""}`} onClick={() => setActive("invite-commissions")}>邀请佣金记录</button>
               </div>
             </details>
           </div>
@@ -1186,6 +1201,7 @@ function PositionsPage() {
                               {opsOpenId === u.id && (
                                 <div className="menu" style={{ position: 'absolute', zIndex: 5, background: '#0f213a', border: '1px solid #263b5e', borderRadius: 6, padding: 6, minWidth: 140 }}>
                                   <button className="btn slim" style={{ width: '100%' }} onClick={() => { setOpsOpenId(null); setSelectedUser(u); }}>详情</button>
+                                  <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'changePassword' }); }}>改登录密码</button>
                                   <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'funds' }); }}>修改账户资金</button>
                                 </div>
                               )}
@@ -1332,6 +1348,9 @@ function PositionsPage() {
         )}
         {active === "settings-invite" && (
           <InviteSettings />
+        )}
+        {active === "invite-commissions" && (
+          <InviteCommissions />
         )}
 
         {/* 统一的弹窗详情 */}
@@ -1652,6 +1671,93 @@ function InviteSettings() {
           <button className="btn primary" onClick={save} disabled={loading}>{loading ? '保存中…' : '保存'}</button>
         </div>
         {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+function InviteCommissions() {
+  const [list, setList] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [status, setStatus] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(false);
+  const fetchList = async () => {
+    try {
+      setLoading(true);
+      const sp = new URLSearchParams();
+      if (status) sp.set('status', status);
+      if (currency) sp.set('currency', currency);
+      if (q.trim()) sp.set('q', q.trim());
+      sp.set('page', String(page));
+      sp.set('pageSize', String(pageSize));
+      const data = await api.get(`/admin/invite/commissions?${sp.toString()}`);
+      setList(Array.isArray(data?.items) ? data.items : []);
+      setTotal(Number(data?.total || 0));
+    } catch (e) { setList([]); setTotal(0); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { fetchList(); }, [page, pageSize]);
+  return (
+    <div className="card flat">
+      <h1 className="title">邀请佣金记录</h1>
+      <div className="sub-actions" style={{ gap:8 }}>
+        <select className="input" value={status} onChange={e=>setStatus(e.target.value)} style={{ maxWidth:160 }}>
+          <option value="">全部状态</option>
+          <option value="frozen">冻结中</option>
+          <option value="released">已解冻</option>
+        </select>
+        <select className="input" value={currency} onChange={e=>setCurrency(e.target.value)} style={{ maxWidth:160 }}>
+          <option value="">全部币种</option>
+          <option value="MXN">MXN</option>
+          <option value="USD">USD</option>
+          <option value="USDT">USDT</option>
+        </select>
+        <input className="input" placeholder="搜索姓名/手机号" value={q} onChange={e=>setQ(e.target.value)} style={{ maxWidth:220 }} />
+        <button className="btn" onClick={() => { setPage(1); fetchList(); }}>{loading ? '查询中…' : '查询'}</button>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+          <thead>
+            <tr style={{ textAlign:'left' }}>
+              <th style={{ padding:'8px 6px' }}>邀请人</th>
+              <th style={{ padding:'8px 6px' }}>好友</th>
+              <th style={{ padding:'8px 6px' }}>来源</th>
+              <th style={{ padding:'8px 6px' }}>币种</th>
+              <th style={{ padding:'8px 6px' }}>金额</th>
+              <th style={{ padding:'8px 6px' }}>状态</th>
+              <th style={{ padding:'8px 6px' }}>剩余冻结</th>
+              <th style={{ padding:'8px 6px' }}>创建时间</th>
+              <th style={{ padding:'8px 6px' }}>解冻时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(r => (
+              <tr key={r.id} style={{ borderTop:'1px solid #263b5e' }}>
+                <td style={{ padding:'8px 6px' }}>{r.inviterName || r.inviterPhone || r.inviterId}</td>
+                <td style={{ padding:'8px 6px' }}>{r.inviteeName || r.inviteePhoneMasked || r.inviteeId}</td>
+                <td style={{ padding:'8px 6px' }}>{r.source}</td>
+                <td style={{ padding:'8px 6px' }}>{r.currency}</td>
+                <td style={{ padding:'8px 6px' }}>{Number(r.amount||0).toFixed(2)}</td>
+                <td style={{ padding:'8px 6px' }}>{r.status==='frozen'?'冻结中':'已解冻'}</td>
+                <td style={{ padding:'8px 6px' }}>{r.status==='frozen' ? Math.ceil((r.remain_ms||0)/60000)+'分' : '—'}</td>
+                <td style={{ padding:'8px 6px' }}>{r.created_at}</td>
+                <td style={{ padding:'8px 6px' }}>{r.released_at || '—'}</td>
+              </tr>
+            ))}
+            {list.length === 0 && (
+              <tr><td colSpan={9} className="desc" style={{ padding:'10px 6px' }}>{loading ? '加载中…' : '暂无数据'}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="sub-actions" style={{ justifyContent:'flex-end', gap:8, marginTop: 10 }}>
+        <button className="btn" onClick={() => setPage(p=>Math.max(1, p-1))}>上一页</button>
+        <div className="desc">{page} / {Math.max(1, Math.ceil(total / pageSize))}</div>
+        <button className="btn" onClick={() => setPage(p=>p+1)} disabled={page >= Math.ceil(total / pageSize)}>下一页</button>
       </div>
     </div>
   );
@@ -3210,6 +3316,47 @@ function FundAdmin() {
             <button className="btn" disabled={orderPage>=ordersTotalPages} onClick={() => setOrderPage(p => Math.min(ordersTotalPages, p+1))}>下一页</button>
           </div>
         </div>
+
+        {showAdd ? (
+          <div className="modal" style={{ alignItems:'flex-start', paddingTop: 100 }}>
+            <div className="modal-card" style={{ maxWidth: 720 }}>
+              <h2 className="title" style={{ marginTop: 0 }}>{fundEditId ? '编辑基金' : '添加基金'}</h2>
+              <div className="form">
+                <label className="label">基金名称（西语）</label>
+                <input className="input" placeholder={'如 Fondo Prueba'} value={form.nameEs} onChange={e => setForm(f => ({ ...f, nameEs: e.target.value }))} />
+                <label className="label">基金名称（英文）</label>
+                <input className="input" placeholder={'如 Test Fund'} value={form.nameEn} onChange={e => setForm(f => ({ ...f, nameEn: e.target.value }))} />
+                <label className="label">基金代码</label>
+                <input className="input" placeholder={'如 FNDX001'} value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} />
+                <label className="label">基金介绍（西语）</label>
+                <textarea className="input" rows={3} placeholder={'基金介绍（西语）'} value={form.descEs} onChange={e => setForm(f => ({ ...f, descEs: e.target.value }))} />
+                <label className="label">基金介绍（英文）</label>
+                <textarea className="input" rows={3} placeholder={'基金介绍（英文）'} value={form.descEn} onChange={e => setForm(f => ({ ...f, descEn: e.target.value }))} />
+                <label className="label">申购价格与配息比例</label>
+                <div className="desc">每行格式：价格,比例%，共4行，例如：2000,15%\n5000,20%\n10000,25%\n20000,30%</div>
+                <textarea className="input" rows={6} placeholder={'价格,比例%（每行一组，共4行）'} value={form.tiers} onChange={e => setForm(f => ({ ...f, tiers: e.target.value }))} />
+                <label className="label">配息方式</label>
+                <select className="input" value={form.dividend} onChange={e => setForm(f => ({ ...f, dividend: e.target.value }))}>
+                  <option value="day">day</option>
+                  <option value="week">week</option>
+                  <option value="month">month</option>
+                </select>
+                <label className="label">赎回周期（天）</label>
+                <input className="input" placeholder={'如 7'} value={form.redeemDays} onChange={e => setForm(f => ({ ...f, redeemDays: e.target.value }))} />
+                <label className="label">币种</label>
+                <select className="input" value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
+                  <option value="MXN">MXN</option>
+                  <option value="USD">USD</option>
+                  <option value="USDT">USDT</option>
+                </select>
+                <div className="sub-actions" style={{ justifyContent:'flex-end', gap:10 }}>
+                  <button className="btn" onClick={() => { setShowAdd(false); setFundEditId(null); }}>取消</button>
+                  <button className="btn primary" onClick={submitAdd}>提交</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
   );
@@ -3381,14 +3528,15 @@ function KycReviewPage() {
   const approve = async (id) => { try { await api.post('/admin/kyc/approve', { id }); alert('已通过'); fetchList(); } catch (e) { alert('操作失败: ' + (e?.message || e)); } };
   const reject = async (id) => { const notes = prompt('驳回原因（必填）') || ''; if (!notes.trim()) return; try { await api.post('/admin/kyc/reject', { id, notes }); alert('已驳回'); fetchList(); } catch (e) { alert('操作失败: ' + (e?.message || e)); } };
 
+  const statusMap = useMemo(() => ({ submitted: '待审核', approved: '已通过', rejected: '已驳回' }), []);
   return (
     <div style={{ marginTop: 10 }}>
       <div className="form admin-form-compact">
         <label className="label">状态</label>
         <select className="input" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="submitted">submitted</option>
-          <option value="approved">approved</option>
-          <option value="rejected">rejected</option>
+          <option value="submitted">待审核</option>
+          <option value="approved">已通过</option>
+          <option value="rejected">已驳回</option>
         </select>
         <label className="label">关键词</label>
         <input className="input" placeholder="用户姓名/手机号" value={q} onChange={e => setQ(e.target.value)} />
@@ -3420,7 +3568,7 @@ function KycReviewPage() {
               <tr key={it.id} style={{ borderTop:'1px solid #263b5e' }}>
                 <td style={{ padding:'8px 6px' }}>{it.userName || it.phone || it.userId}</td>
                 <td style={{ padding:'8px 6px' }}>{it.submitted_at}</td>
-                <td style={{ padding:'8px 6px' }}>{it.status}</td>
+                <td style={{ padding:'8px 6px' }}>{statusMap[it.status] || it.status}</td>
                 <td style={{ padding:'8px 6px' }}>
                   <div className="desc">姓名：{it.fields?.name || '-'} | 证件类型：{it.fields?.idType || '-'} | 证件号码：{it.fields?.idNumber || '-'}</div>
                 </td>

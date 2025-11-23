@@ -585,6 +585,9 @@ input[type="tel"], input[type="password"], input[type="email"], input[type="text
 .modal-body { font-size: clamp(14px, 4vw, 16px); }
 .modal .input { height: clamp(44px, 6.5vh, 52px); font-size: clamp(16px, 4.2vw, 18px); }
 .modal .btn { height: clamp(42px, 6vh, 48px); font-size: clamp(14px, 4vw, 16px); }
+.admin-form-compact { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 12px; align-items: center; }
+.admin-form-compact .label { font-size: 14px; opacity: .9; }
+.admin-form-compact .input { height: 36px; font-size: 14px; max-width: 360px; }
 
 @media (max-width: 920px) {
   .admin-layout { display: block !important; align-items: stretch; justify-content: flex-start; padding: 0; }

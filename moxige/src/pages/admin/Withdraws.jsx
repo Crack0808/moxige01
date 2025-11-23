@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { adminWithdrawList, adminWithdrawApprove, adminWithdrawComplete, adminWithdrawReject } from '../../services/api'
+import { adminWithdrawList, adminWithdrawApprove, adminWithdrawComplete, adminWithdrawReject, api } from '../../services/api'
 
 export default function AdminWithdraws({ embedded = false }) {
   const [phone, setPhone] = useState('')
@@ -11,9 +11,15 @@ export default function AdminWithdraws({ embedded = false }) {
   const [endDate, setEndDate] = useState('')
   const [pageSize, setPageSize] = useState(20)
   const [page, setPage] = useState(1)
+  const [staffs, setStaffs] = useState([])
 
   async function load() { try { const r = await adminWithdrawList(phone?{phone}:{}); setItems(r.items||[]) } catch (e) { setError(e?.message||'加载失败') } }
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const timer = setInterval(() => { load() }, 5000)
+    return () => clearInterval(timer)
+  }, [])
+  useEffect(() => { (async()=>{ try { const r = await api.get('/admin/staffs'); setStaffs((r.items||r.staffs||[])) } catch {} })() }, [])
 
   const filtered = useMemo(() => {
     let arr = Array.isArray(items) ? items.slice() : []
@@ -37,6 +43,30 @@ export default function AdminWithdraws({ embedded = false }) {
   async function approve(id) { try { await adminWithdrawApprove(id); await load() } catch {} }
   async function complete(id) { try { await adminWithdrawComplete(id); await load() } catch {} }
   async function reject(id) { try { await adminWithdrawReject(id); await load() } catch {} }
+
+  const fmtTime = (ts) => {
+    try {
+      const d = new Date(ts)
+      if (!Number.isFinite(d.getTime())) return String(ts||'')
+      const y = d.getFullYear()
+      const m = String(d.getMonth()+1).padStart(2,'0')
+      const dd = String(d.getDate()).padStart(2,'0')
+      const hh = String(d.getHours()).padStart(2,'0')
+      const mm = String(d.getMinutes()).padStart(2,'0')
+      return `${y}-${m}-${dd} ${hh}:${mm}`
+    } catch { return String(ts||'') }
+  }
+  const fmtAmt = (a) => { try { const n = Number(a); return Number.isFinite(n) ? n.toLocaleString('zh-CN') : String(a||'') } catch { return String(a||'') } }
+
+  const staffMap = useMemo(() => {
+    const m = new Map()
+    ;(Array.isArray(staffs)?staffs:[]).forEach(s => { m.set(Number(s.id), s) })
+    return m
+  }, [staffs])
+  const showOperator = (id) => {
+    const it = staffMap.get(Number(id||0))
+    return it ? (it.account || it.name || it.phone) : ''
+  }
 
   const header = (
     <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -62,19 +92,30 @@ export default function AdminWithdraws({ embedded = false }) {
   )
 
   const table = (
-    <table className="table">
-      <thead><tr><th>姓名</th><th>手机号</th><th>申请时间</th><th>归属运营</th><th>币种</th><th>金额</th><th>状态</th><th>操作</th></tr></thead>
+    <table className="table" style={{ width:'100%', borderCollapse:'collapse' }}>
+      <thead>
+        <tr style={{ textAlign:'left' }}>
+          <th style={{ padding:'8px 6px' }}>姓名</th>
+          <th style={{ padding:'8px 6px' }}>手机号</th>
+          <th style={{ padding:'8px 6px' }}>申请时间</th>
+          <th style={{ padding:'8px 6px' }}>归属运营</th>
+          <th style={{ padding:'8px 6px' }}>币种</th>
+          <th style={{ padding:'8px 6px' }}>金额</th>
+          <th style={{ padding:'8px 6px' }}>状态</th>
+          <th style={{ padding:'8px 6px' }}>操作</th>
+        </tr>
+      </thead>
       <tbody>
         {pageItems.map(x => (
-          <tr key={x.id}>
-            <td>{x.name||''}</td>
-            <td>{x.phone||''}</td>
-            <td>{x.created_at||''}</td>
-            <td>{x.operator_id||''}</td>
-            <td>{x.currency}</td>
-            <td>{x.amount}</td>
-            <td>{x.status==='pending'?'待审核':x.status==='processing'?'处理中':x.status==='completed'?'已完成':x.status==='rejected'?'已驳回':x.status}</td>
-            <td>
+          <tr key={x.id} style={{ borderTop:'1px solid #263b5e' }}>
+            <td style={{ padding:'8px 6px' }}>{x.name||''}</td>
+            <td style={{ padding:'8px 6px' }}>{x.phone||''}</td>
+            <td style={{ padding:'8px 6px' }}>{fmtTime(x.created_at)}</td>
+            <td style={{ padding:'8px 6px' }}>{showOperator(x.operator_id)}</td>
+            <td style={{ padding:'8px 6px', fontWeight:600 }}>{x.currency}</td>
+            <td style={{ padding:'8px 6px', textAlign:'right' }}>{fmtAmt(x.amount)}</td>
+            <td style={{ padding:'8px 6px' }}>{x.status==='pending'?'待审核':x.status==='processing'?'处理中':x.status==='completed'?'已完成':x.status==='rejected'?'已驳回':x.status}</td>
+            <td style={{ padding:'8px 6px' }}>
               {x.status==='pending' && (<button className="btn" onClick={()=>approve(x.id)}>进入审批</button>)}
               {x.status==='processing' && (<>
                 <button className="btn" onClick={()=>complete(x.id)}>已完成打款</button>

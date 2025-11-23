@@ -72,8 +72,8 @@ export default function Profile() {
         }
         if (!uid) { setLoading(false); return; }
         let data;
-        try { data = await api.get(`/admin/users/${uid}/balances`); }
-        catch { data = await api.get(`/me/balances`); }
+        try { data = await api.get(`/me/balances`); }
+        catch { data = await api.get(`/admin/users/${uid}/balances`); }
         const arr = Array.isArray(data?.balances) ? data.balances : [];
         const map = arr.reduce((m, r) => { m[String(r.currency).toUpperCase()] = Number(r.amount || 0); return m; }, {});
         if (stopped) return;
@@ -190,7 +190,11 @@ export default function Profile() {
         <div className="card borderless-card section-card">
           <div className="promo-block">{lang==='es'?'Espacio publicitario':'Promo Space'}</div>
           <div className="logout-area">
-            <button className="btn logout-btn" onClick={() => { try { localStorage.removeItem('sessionUser'); } catch {} }}>{lang==='es'?'Cerrar sesión':'Log Out'}</button>
+            <button className="btn logout-btn" onClick={async () => {
+              try { await api.post('/auth/logout', {}); } catch {}
+              try { localStorage.removeItem('sessionUser'); localStorage.removeItem('token'); localStorage.removeItem('csrf:token'); } catch {}
+              try { nav('/login'); } catch {}
+            }}>{lang==='es'?'Cerrar sesión':'Log Out'}</button>
           </div>
           {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
         </div>

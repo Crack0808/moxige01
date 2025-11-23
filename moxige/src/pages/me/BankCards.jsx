@@ -134,17 +134,34 @@ export default function BankCards() {
   };
 
   const Card = ({ item }) => (
-    <div className="card" style={{ display:'flex', alignItems:'stretch', gap:12, paddingTop:5 }}>
-      {/* 移除头像 */}
-      <div style={{ flex:1, display:'flex', flexDirection:'column', position:'relative' }}>
-        <div className="title" style={{ margin:0 }}>{item.bank_name || 'Bank'}</div>
-        {/* 卡号居中显示在卡片中间（水平居中） */}
-        <div className="desc" style={{ marginTop:8, textAlign:'center', width:'100%' }}>{masked(item.bin, item.last4)}</div>
-        <div className="desc" style={{ marginTop:8 }}>{item.holder_name || ''}</div>
-        {/* 右下角两个按钮 */}
-        <div style={{ position:'absolute', right:0, bottom:0, display:'flex', gap:8 }}>
-          <button className="btn" onClick={() => { setEditId(item.id); setCardNumber(''); setHolderName(item.holder_name || ''); setBankName(item.bank_name || ''); setCurrentMasked(masked(item.bin, item.last4)); setModalOpen(true); }}>{t('edit')}</button>
-          <button className="btn" onClick={() => setConfirmDelete({ show:true, id:item.id })}>{t('delete')}</button>
+    <div
+      className="card"
+      style={{
+        display:'flex',
+        alignItems:'stretch',
+        gap:14,
+        padding:'14px 16px',
+        border:'1px solid rgba(91,141,239,0.32)',
+        borderRadius:12,
+        boxShadow:'0 0 0 2px rgba(91,141,239,0.18), inset 0 0 0 2px rgba(91,141,239,0.12)',
+        minHeight:110
+      }}
+    >
+      <div style={{ flex:1, display:'flex', flexDirection:'column' }}>
+        <div className="title" style={{ margin:0, fontSize:18 }}>{item.bank_name || 'Bank'}</div>
+        <div className="desc" style={{ marginTop:10, textAlign:'center', width:'100%', fontSize:16 }}>{masked(item.bin, item.last4)}</div>
+        <div className="desc" style={{ marginTop:10, fontSize:14 }}>{item.holder_name || ''}</div>
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:10 }}>
+          <button
+            className="btn"
+            style={{ background:'linear-gradient(90deg, #5ba1ff, #8b67ff)', color:'#fff', border:'1px solid rgba(255,255,255,0.35)', padding:'6px 12px', borderRadius:10, filter:'brightness(1.05)' }}
+            onClick={() => { setEditId(item.id); setCardNumber(''); setHolderName(item.holder_name || ''); setBankName(item.bank_name || ''); setCurrentMasked(masked(item.bin, item.last4)); setModalOpen(true); }}
+          >{t('edit')}</button>
+          <button
+            className="btn"
+            style={{ background:'linear-gradient(90deg, #ff8aa1, #ff5c7a)', color:'#0c1529', border:'1px solid rgba(255,255,255,0.35)', padding:'6px 12px', borderRadius:10, filter:'brightness(1.05)' }}
+            onClick={() => setConfirmDelete({ show:true, id:item.id })}
+          >{t('delete')}</button>
         </div>
       </div>
     </div>

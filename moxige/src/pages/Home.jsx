@@ -190,15 +190,8 @@ export default function Home() {
         } catch (_) { /* 忽略回退失败 */ }
       }
       if (!uid) return; // 未登录或依旧无ID时跳过
-      // 先尝试用户态接口；若返回 401/404/HTML 则回退到管理员接口
-      let data;
-      try {
-        data = await api.get(`/me/balances`);
-        const arr = Array.isArray(data?.balances) ? data.balances : [];
-        if (arr.length === 0) throw new Error('empty balances');
-      } catch (_) {
-        data = await api.get(`/admin/users/${uid}/balances`);
-      }
+      // 客户态接口
+      const data = await api.get(`/me/balances`);
       const arr = Array.isArray(data?.balances) ? data.balances : [];
       const map = arr.reduce((m, r) => { m[String(r.currency).toUpperCase()] = Number(r.amount || 0); return m; }, {});
       setBalanceMXN(Number.isFinite(map.MXN) ? map.MXN : 0);

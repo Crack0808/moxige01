@@ -48,7 +48,7 @@ function formatPrice(n, currency, lang) {
 export default function Market() {
   const { lang, t } = useI18n();
   const navigate = useNavigate();
-  const [market, setMarket] = useState("mx"); // mx | us | crypto
+  const [market, setMarket] = useState("us"); // mx | us | crypto
   const [showMobileDropdown, setShowMobileDropdown] = useState(false); // 移动端下拉菜单控制
   const PAGE_SIZE = (() => {
     const v = Number(import.meta.env.VITE_PAGE_SIZE || 10);
@@ -83,6 +83,41 @@ export default function Market() {
       return { mx: o.mx || [], us: o.us || [], crypto: o.crypto || [] };
     } catch { return { mx: [], us: [], crypto: [] }; }
   });
+
+  // News state
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [showNews, setShowNews] = useState(false);
+  const [newsIndex, setNewsIndex] = useState(0);
+  const [showNewsList, setShowNewsList] = useState(false);
+  const touchRef = useRef({ x: 0, y: 0 });
+
+  const fetchMxInvestNews = useCallback(async () => {
+    try {
+      setNewsLoading(true);
+      // Google News RSS for Mexico investment/finance (es-419)
+      const url = 'https://news.google.com/rss/search?q=inversi%C3%B3n%20OR%20finanzas%20site:mx&hl=es-419&gl=MX&ceid=MX:es-419';
+      const xml = await fetch(url).then(r => r.text());
+      const doc = new window.DOMParser().parseFromString(xml, 'text/xml');
+      const items = Array.from(doc.querySelectorAll('item'));
+      const list = items.slice(0, 20).map(it => {
+        const title = it.querySelector('title')?.textContent || '';
+        const link = it.querySelector('link')?.textContent || '';
+        const desc = it.querySelector('description')?.textContent || '';
+        const pubDate = it.querySelector('pubDate')?.textContent || '';
+        const enclosure = it.querySelector('enclosure');
+        const media = it.querySelector('media\\:content');
+        const img = enclosure?.getAttribute('url') || media?.getAttribute('url') || `https://picsum.photos/seed/${encodeURIComponent(title||link)}/600/400`;
+        return { title, link, desc, pubDate, img };
+      });
+      setNews(list);
+      setNewsIndex(0);
+      setShowNewsList(true);
+    } catch {
+      setNews([]);
+      setShowNewsList(true);
+    } finally { setNewsLoading(false); }
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem("marketCryptoCurrency", cryptoCurrency); } catch {}
@@ -125,12 +160,26 @@ export default function Market() {
             { symbol: "AMXL.MX", name: "América Móvil", price: 17.2, changePct: 0.8, volume: 12000000 },
             { symbol: "WALMEX.MX", name: "Walmart de México", price: 65.1, changePct: -0.3, volume: 9000000 },
             { symbol: "BIMBOA.MX", name: "Grupo Bimbo", price: 77.8, changePct: 1.2, volume: 6000000 },
+            { symbol: "FEMSAUBD.MX", name: "FEMSA", price: 816.4, changePct: 0.1, volume: 3000000 },
+            { symbol: "GMEXICOB.MX", name: "Grupo Mexico", price: 110.2, changePct: -0.2, volume: 5000000 },
+            { symbol: "GFNORTEO.MX", name: "Banorte", price: 165.0, changePct: 0.3, volume: 4000000 },
+            { symbol: "ALSEA.MX", name: "Alsea", price: 45.3, changePct: 0.6, volume: 2500000 },
+            { symbol: "GAPB.MX", name: "GAP", price: 280.5, changePct: -0.1, volume: 1800000 },
+            { symbol: "KIMBERA.MX", name: "Kimberly-Clark de Mexico", price: 39.8, changePct: 0.2, volume: 2100000 },
+            { symbol: "TLEVISA.CPO.MX", name: "Televisa", price: 12.7, changePct: -0.4, volume: 3200000 },
           ]);
         } else {
           setRows([
             { symbol: "AAPL", name: "Apple", price: 180.2, changePct: 0.5, volume: 80000000 },
             { symbol: "MSFT", name: "Microsoft", price: 410.8, changePct: -0.2, volume: 35000000 },
             { symbol: "TSLA", name: "Tesla", price: 230.3, changePct: 1.1, volume: 70000000 },
+            { symbol: "AMZN", name: "Amazon", price: 175.0, changePct: 0.4, volume: 60000000 },
+            { symbol: "GOOGL", name: "Alphabet", price: 135.6, changePct: -0.1, volume: 28000000 },
+            { symbol: "META", name: "Meta", price: 330.4, changePct: 0.3, volume: 22000000 },
+            { symbol: "NVDA", name: "NVIDIA", price: 480.7, changePct: 0.9, volume: 50000000 },
+            { symbol: "JPM", name: "JPMorgan", price: 150.2, changePct: -0.2, volume: 18000000 },
+            { symbol: "ORCL", name: "Oracle", price: 110.9, changePct: 0.2, volume: 16000000 },
+            { symbol: "INTC", name: "Intel", price: 38.5, changePct: 0.1, volume: 35000000 },
           ]);
         }
         const nextCount = start + syms.length;
@@ -216,6 +265,13 @@ export default function Market() {
           { symbol: "AAPL", name: "Apple", price: 180.2, changePct: 0.5, volume: 80000000 },
           { symbol: "MSFT", name: "Microsoft", price: 410.8, changePct: -0.2, volume: 35000000 },
           { symbol: "TSLA", name: "Tesla", price: 230.3, changePct: 1.1, volume: 70000000 },
+          { symbol: "AMZN", name: "Amazon", price: 175.0, changePct: 0.4, volume: 60000000 },
+          { symbol: "GOOGL", name: "Alphabet", price: 135.6, changePct: -0.1, volume: 28000000 },
+          { symbol: "META", name: "Meta", price: 330.4, changePct: 0.3, volume: 22000000 },
+          { symbol: "NVDA", name: "NVIDIA", price: 480.7, changePct: 0.9, volume: 50000000 },
+          { symbol: "JPM", name: "JPMorgan", price: 150.2, changePct: -0.2, volume: 18000000 },
+          { symbol: "ORCL", name: "Oracle", price: 110.9, changePct: 0.2, volume: 16000000 },
+          { symbol: "INTC", name: "Intel", price: 38.5, changePct: 0.1, volume: 35000000 },
         ]);
         setHasMore(false);
       } else {
@@ -626,11 +682,15 @@ export default function Market() {
                 )}
               </div>
             </div>
+            <div style={{ marginLeft: 8 }}>
+              <button className="pill" onClick={fetchMxInvestNews} aria-busy={newsLoading}>{t('news') || (lang==='es'?'Noticias':'News')}</button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* 内容区域 */}
+      {!showNewsList && (
       <div className="market-content" style={{ position: 'relative' }}>
         <div className="card">
           <>
@@ -812,6 +872,74 @@ export default function Market() {
           </>
         </div>
       </div>
+      )}
+
+      {showNewsList && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <h2 className="title" style={{ marginTop: 0 }}>{t('news') || (lang==='es'?'Noticias':'News')}</h2>
+          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
+            <button className="pill" onClick={()=>setShowNewsList(false)}>{t('viewOverview') || 'Back to Market'}</button>
+          </div>
+          {newsLoading && <div className="desc">{t('loading') || 'Loading...'}</div>}
+          {!newsLoading && (news||[]).length === 0 && (
+            <div className="desc">{t('noMatches') || 'No data'}</div>
+          )}
+          {!newsLoading && (news||[]).length > 0 && (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:12 }}>
+              {(news||[]).map((n, idx) => (
+                <div key={`nx-${idx}`} className="card flat" style={{ cursor:'pointer' }} onClick={()=>{ setNewsIndex(idx); setShowNews(true); }}>
+                  <img src={n.img} alt={n.title} style={{ width:'100%', height:110, objectFit:'cover', borderRadius:8 }} />
+                  <div style={{ fontSize:12, marginTop:6, fontWeight:700 }}>{n.title}</div>
+                  <div className="desc" style={{ fontSize:12 }}>{String(n.desc||'').replace(/<[^>]+>/g,'').slice(0,80)}...</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showNews && (
+        <div className="modal" role="dialog" aria-modal="true" onClick={()=>setShowNews(false)}>
+          <div className="modal-card" style={{ maxWidth: 920 }} onClick={(e)=>e.stopPropagation()}
+            onTouchStart={(e)=>{ const t=e.touches?.[0]; if (t) touchRef.current={ x:t.clientX, y:t.clientY }; }}
+            onTouchEnd={(e)=>{ const t=e.changedTouches?.[0]; if (!t) return; const dx = t.clientX - touchRef.current.x; if (Math.abs(dx) > 40) { setNewsIndex(i => {
+              if (dx < 0) return Math.min((news||[]).length-1, i+1); else return Math.max(0, i-1);
+            }); } }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 8 }}>
+              <h2 className="title" style={{ margin:0 }}>{t('news') || (lang==='es'?'Noticias':'News')}</h2>
+              <button className="pill" onClick={()=>setShowNews(false)}>×</button>
+            </div>
+            {news.length === 0 ? (
+              <div className="desc" style={{ padding:'16px 0' }}>{newsLoading ? (t('loading') || 'Loading...') : (t('noMatches') || 'No data')}</div>
+            ) : (
+              <div style={{ display:'grid', gap:12 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr', justifyItems:'center' }}>
+                  {(() => { const it = news[newsIndex] || {}; return (
+                    <div style={{ width:'100%', display:'grid', gap:10 }}>
+                      <img src={it.img} alt={it.title} style={{ width:'100%', maxHeight:420, objectFit:'cover', borderRadius:10 }} />
+                      <div style={{ fontWeight:700 }}>{it.title}</div>
+                      <div className="desc" style={{ lineHeight:1.6 }}>{it.desc?.replace(/<[^>]+>/g,'')?.slice(0,200)}...</div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <button className="pill" onClick={()=>setNewsIndex(i => Math.max(0, i-1))} disabled={newsIndex<=0}>{t('prev')||'Prev'}</button>
+                        <a className="pill" href={it.link} target="_blank" rel="noopener noreferrer">{t('open')||'Open'}</a>
+                        <button className="pill" onClick={()=>setNewsIndex(i => Math.min(news.length-1, i+1))} disabled={newsIndex>=news.length-1}>{t('next')||'Next'}</button>
+                      </div>
+                    </div>
+                  ); })()}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:10 }}>
+                  {(news||[]).map((n, idx) => (
+                    <div key={`n-${idx}`} className="card flat" style={{ cursor:'pointer' }} onClick={()=>setNewsIndex(idx)}>
+                      <img src={n.img} alt={n.title} style={{ width:'100%', height:100, objectFit:'cover', borderRadius:8 }} />
+                      <div style={{ fontSize:12, marginTop:6 }}>{n.title}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

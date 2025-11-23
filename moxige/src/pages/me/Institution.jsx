@@ -29,6 +29,14 @@ export default function Institution() {
   const [orders, setOrders] = useState([]); // 用户认购的大宗订单（后端）
   const [quotes, setQuotes] = useState({}); // 实时行情 { key: { price, changePct } }
   const [toast, setToast] = useState({ show: false, type: 'info', text: '' });
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return typeof window !== 'undefined' ? (window.innerWidth <= 767) : false; } catch { return false; }
+  });
+  useEffect(() => {
+    const onResize = () => { try { setIsMobile(window.innerWidth <= 767); } catch {} };
+    try { window.addEventListener('resize', onResize); } catch {}
+    return () => { try { window.removeEventListener('resize', onResize); } catch {} };
+  }, []);
   const [locked, setLocked] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [inviteError, setInviteError] = useState('');
@@ -92,12 +100,8 @@ export default function Institution() {
             setTradeDisabled(!!meData.user.trade_disabled);
           }
         } catch {}
-        try {
-          data = await api.get(`/me/balances`);
-          setTradeDisabled(!!data?.disabled);
-        } catch {
-          data = await api.get(`/admin/users/${uid}/balances`);
-        }
+        data = await api.get(`/me/balances`);
+        setTradeDisabled(!!data?.disabled);
         const arr = Array.isArray(data?.balances) ? data.balances : [];
         const map = arr.reduce((m, r) => { m[String(r.currency).toUpperCase()] = Number(r.amount || 0); return m; }, {});
         if (stopped) return;
@@ -140,6 +144,20 @@ export default function Institution() {
     const s = session;
     setAvatarUrl(normalizeAvatar(s?.avatar || s?.avatarUrl || avatarUrl));
   }, [session]);
+
+  useEffect(() => {
+    const onStorage = (e) => {
+      try {
+        if (!e || !e.key || e.key === 'sessionUser') {
+          const u = JSON.parse(localStorage.getItem('sessionUser') || 'null');
+          setSession(u);
+          setAvatarUrl(normalizeAvatar(u?.avatar || u?.avatarUrl || ''));
+        }
+      } catch {}
+    };
+    try { window.addEventListener('storage', onStorage); } catch {}
+    return () => { try { window.removeEventListener('storage', onStorage); } catch {} };
+  }, []);
 
   // 加载用户的大宗订单卡片与状态
   useEffect(() => {
@@ -311,17 +329,17 @@ export default function Institution() {
             <div className="top-left">
               <div className="avatar-wrap">
                 <img className="avatar" src={avatarUrl || "/logo.png"} alt="avatar" onError={(e)=>{ try { e.currentTarget.src = '/logo.png'; } catch {} }} />
-                <button className="btn" style={{ position:'absolute', right: -6, top: -6, height: 32, padding: '0 10px', borderRadius: 10, background: 'linear-gradient(90deg, #00e5ff, #7c4dff)', color: '#061223', border: 'none' }} onClick={()=>nav('/me/invite')}>{lang==='zh'?'邀请':(lang==='es'?'Invitar':'Invite')}</button>
               </div>
               <div className="top-name">{labels.title}</div>
               </div>
-              <div className="top-right">
+              <div className="top-right" style={{ position: 'relative' }}>
                 <div className="top-title">{lang==='zh' ? '资产' : (lang==='es' ? 'Fondos' : 'Funds')}</div>
                 <div className="funds-list">
                   <div className="fund-row"><span className="label">MX</span><span className="value">{formatMXN(funds.mxn, lang)}</span></div>
                   <div className="fund-row"><span className="label">USD</span><span className="value">{formatMoney(funds.usd, 'USD', lang)}</span></div>
                   <div className="fund-row"><span className="label">USDT</span><span className="value">{formatUSDT(funds.usdt, lang)}</span></div>
                 </div>
+                <button className="btn" style={{ position:'absolute', right: 0, top: 0, height: 32, padding: '0 10px', borderRadius: 10, background: 'linear-gradient(90deg, #00e5ff, #7c4dff)', color: '#061223', border: 'none' }} onClick={()=>nav('/me/invite')}>{lang==='zh'?'邀请':(lang==='es'?'Invitar':'Invite')}</button>
                 {tradeDisabled && <div className="desc" style={{ marginTop: 6, color: '#ff6b6b' }}>{lang==='es'?'Operación deshabilitada (USD negativo)':'Trading disabled (USD negative)'}</div>}
               </div>
           </div>
@@ -367,7 +385,7 @@ export default function Institution() {
               <div className="desc">{labels.emptyTip}</div>
             )}
             {(orders || []).filter(o => (tab==='current' ? o.status!=='done' : o.status==='done')).map(o => (
-              <div key={o.id} className="card flat order-row" style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 8, alignItems: 'center', border: '1px solid rgba(68,120,192,0.38)', borderRadius: 14, padding: '12px 14px', background: 'linear-gradient(180deg, rgba(12,18,28,0.78), rgba(12,18,28,0.55))', boxShadow: '0 0 0 2px rgba(68,120,192,0.32), inset 0 0 0 2px rgba(68,120,192,0.26), inset 0 8px 28px rgba(68,120,192,0.14)', overflow: 'hidden', boxSizing: 'border-box' }}>
+              <div key={o.id} className="card flat order-row" style={{ display: 'grid', gridTemplateColumns: (isMobile ? '1fr' : '1fr 180px'), gap: 8, alignItems: (isMobile ? 'start' : 'center'), border: '1px solid rgba(68,120,192,0.38)', borderRadius: 14, padding: '12px 14px', background: 'linear-gradient(180deg, rgba(12,18,28,0.78), rgba(12,18,28,0.55))', boxShadow: '0 0 0 2px rgba(68,120,192,0.32), inset 0 0 0 2px rgba(68,120,192,0.26), inset 0 8px 28px rgba(68,120,192,0.14)', overflow: 'hidden', boxSizing: 'border-box' }}>
                 <div style={{ display: 'grid', gap: 4, minWidth: 0, wordBreak: 'break-word' }}>
                   <div style={{ fontWeight: 700 }}>{String(o.market).toUpperCase()} · {String(o.symbol).toUpperCase()}</div>
                   <div className="desc">
@@ -386,7 +404,7 @@ export default function Institution() {
                     {lang==='zh' ? '提交于' : (lang==='es' ? 'Enviado' : 'Submitted')}: {formatMinute(Number(o.ts||Date.now()))}
                   </div>
                 </div>
-                <div style={{ display:'grid', justifyItems:'end', alignContent:'start', gap:6, minWidth: 0, paddingRight: 6 }}>
+                <div style={{ display:'grid', justifyItems:(isMobile ? 'start' : 'end'), alignContent:'start', gap:6, minWidth: 0, paddingRight: (isMobile ? 0 : 6), paddingTop: (isMobile ? 8 : 0) }}>
                   <span className="tag" style={{ background: statusColor(o.status) }}>{statusLabel(o.status)}</span>
                   <div style={{ fontSize:18, fontWeight:700, color: profitColor(o) }}>{pnlPct(o)}%</div>
                   <div style={{ fontSize:14, color: profitColor(o) }}>{Number(pnlValue(o)).toFixed(2)}</div>

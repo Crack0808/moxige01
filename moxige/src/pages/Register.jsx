@@ -4,12 +4,13 @@ import { useI18n } from "../i18n.jsx";
 import { registerPhone } from "../services/auth.js";
 
 export default function Register() {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
+  const [toast, setToast] = useState({ show: false, type: 'ok', text: '' });
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
@@ -35,12 +36,14 @@ export default function Register() {
       setError(String(err?.message || t("errorRegistered")));
       return;
     }
-    alert(t("successRegister"));
-    navigate("/login");
+    const msg = lang === 'es' ? 'Registro exitoso' : 'Registration successful';
+    setToast({ show: true, type: 'ok', text: msg });
+    setTimeout(() => { setToast({ show: false, type: 'ok', text: '' }); navigate('/login'); }, 1000);
   };
 
   return (
     <div className="screen">
+      {toast.show && (<div className={`top-toast ${toast.type}`}>{toast.text}</div>)}
       <div className="card">
         <h1 className="title">{t("registerTitle")}</h1>
         <form onSubmit={handleRegister} className="form">

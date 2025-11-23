@@ -242,8 +242,8 @@
       setProfile({ phone: currentPhone, name, avatar })
       if (chatEl) { chatEl.classList.remove('hidden') }
       socket.emit('join', { phone: currentPhone, role: 'customer' })
-      const history = await fetch('/api/messages/' + encodeURIComponent(currentPhone)).then(r => r.json())
-      history.forEach(renderMessage)
+      const msgsHistory = await fetch('/api/messages/' + encodeURIComponent(currentPhone)).then(r => r.json())
+      (Array.isArray(msgsHistory) ? msgsHistory : []).forEach(renderMessage)
       setTimeout(scrollChatToBottom, 0)
       if (isActive && atBottom()) socket.emit('seen', { phone: currentPhone })
       const tryEmitSeen = () => { if (isActive && atBottom()) socket.emit('seen', { phone: currentPhone }) }
@@ -344,17 +344,35 @@
         renderMessage(m)
         if (m.sender === 'agent' && isActive && atBottom()) socket.emit('seen', { phone: currentPhone })
       })
-      socket.on('recalled', r => {
-        const el = messagesEl.querySelector('[data-id="' + r.id + '"]')
-        if (!el) return
-        el.remove()
-        msgs = msgs.filter(x => x.id !== r.id)
-      })
+  socket.on('recalled', r => {
+    const el = messagesEl.querySelector('[data-id="' + r.id + '"]')
+    if (!el) return
+    el.remove()
+    msgs = msgs.filter(x => x.id !== r.id)
+  })
+    // 语言与文案（仅支持 es/en）
+    const isEs = langParam === 'es'
+    const isEn = langParam === 'en'
+    if (serviceLabel) {
+      serviceLabel.textContent = isEs ? 'Soporte en línea' : 'Online Support'
     }
+    messageInput.placeholder = placeholderParam ? decodeURIComponent(placeholderParam) : (isEs ? 'Escribir mensaje' : 'Enter message')
+    // 发送按钮显示图标，不使用文字
+    backBtn.onclick = () => {
+      try { window.close(); } catch {}
+      try {
+        if (window.history && typeof window.history.back === 'function') {
+          window.history.back()
+        } else {
+          location.href = '/me'
+        }
+      } catch { location.href = '/me' }
+    }
+  }
 
-    if (presetPhone) {
-      startChat(presetPhone, presetName || '', presetAvatar || '')
-    }
+  if (presetPhone) {
+    startChat(presetPhone, presetName || '', presetAvatar || '')
+  }
     let replyPreview
     let replyText
     let replyCancel
@@ -391,15 +409,6 @@
       activeMsgMenu = menu
       document.addEventListener('click', closeMenu, { once: true })
     }
-  </script>
+</script>
 </body>
 </html>
-    // 语言与文案（仅支持 es/en）
-    const isEs = langParam === 'es'
-    const isEn = langParam === 'en'
-    if (serviceLabel) {
-      serviceLabel.textContent = isEs ? 'Soporte en línea' : 'Online Support'
-    }
-    messageInput.placeholder = placeholderParam ? decodeURIComponent(placeholderParam) : (isEs ? 'Escribir mensaje' : 'Enter message')
-    sendBtn.textContent = sendParam ? decodeURIComponent(sendParam) : (isEs ? 'Enviar' : 'Send')
-    backBtn.onclick = () => { try { window.close(); } catch {} try { history.back(); } catch {} }

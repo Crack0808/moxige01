@@ -87,12 +87,8 @@ export default function Exchange() {
           setTradeDisabled(!!meData.user.trade_disabled);
         }
       } catch {}
-      try {
-        data = await api.get(`/me/balances`);
-        setTradeDisabled(!!data?.disabled);
-      } catch {
-        data = await api.get(`/admin/users/${uid}/balances`);
-      }
+      data = await api.get(`/me/balances`);
+      setTradeDisabled(!!data?.disabled);
       const arr = Array.isArray(data?.balances) ? data.balances : [];
       const map = arr.reduce((m, r) => { m[String(r.currency).toUpperCase()] = Number(r.amount || 0); return m; }, {});
       setBalanceMXN(Number.isFinite(map.MXN) ? map.MXN : 0);

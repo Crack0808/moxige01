@@ -16,11 +16,11 @@ const BASE = (() => {
     const port = isBrowser ? String(location.port || '') : '';
     const host = isBrowser ? String(location.hostname || '') : '';
     const isDevLocal = isBrowser && (port === '5173' || port === '5174') && (host === 'localhost' || host === '127.0.0.1');
-    if (isDevLocal) return normalizeBase('http://127.0.0.1:5214');
-  } catch {}
-  try {
-    const override = String(localStorage.getItem('api:base:override') || '').trim();
-    if (override) return normalizeBase(override);
+    if (isDevLocal) return normalizeBase('http://127.0.0.1:5210');
+    try {
+      const override = String(localStorage.getItem('api:base:override') || '').trim();
+      if (override) return normalizeBase(override);
+    } catch {}
   } catch {}
   try {
     const ls = String(localStorage.getItem('api:base') || '').trim();
@@ -118,7 +118,7 @@ async function silentAdminLogin(base) {
 
 async function request(path, { method = 'GET', body, headers = {}, timeoutMs } = {}) {
   let lastErr = null;
-  const base = activeBase;
+  let base = activeBase;
   let attempts = 0;
   while (attempts < 2) {
       const h = {
@@ -200,6 +200,20 @@ async function request(path, { method = 'GET', body, headers = {}, timeoutMs } =
           // 若返回为 HTML，避免把整页 HTML 填充到错误信息中
           const msg = isJson ? (data?.error || `HTTP ${res.status}`) : (looksHtml ? `HTTP ${res.status}: Not found (HTML)` : String(data).slice(0, 300));
           lastErr = new Error(msg);
+          try {
+            const isBrowser = typeof location !== 'undefined';
+            const port = isBrowser ? String(location.port || '') : '';
+            const host = isBrowser ? String(location.hostname || '') : '';
+            const isDevLocal = isBrowser && (port === '5173' || port === '5174') && (host === 'localhost' || host === '127.0.0.1');
+            if (isDevLocal) {
+              const alt = normalizeBase('http://127.0.0.1:5210');
+              if (String(base) !== alt) {
+                base = alt;
+                attempts++;
+                continue;
+              }
+            }
+          } catch {}
           break;
         }
         const msg = isJson ? (data?.error || 'Request failed') : (looksHtml ? 'Request failed: received HTML' : String(data).slice(0, 300));
@@ -223,7 +237,7 @@ export const api = {
   post: (p, body, opts) => request(p, { method: 'POST', body, ...(opts||{}) }),
   put: (p, body, opts) => request(p, { method: 'PUT', body, ...(opts||{}) }),
   delete: (p, opts) => request(p, { method: 'DELETE', ...(opts||{}) }),
-  setBase: (u) => setApiBase(u),
+  setBase: (u) => { try { activeBase = normalizeBase(String(u||'')); } catch { activeBase = normalizeBase(String(u||'')); } },
 };
 
 export async function meWithdrawCreate(payload) { return api.post('/me/withdraw/create', payload); }

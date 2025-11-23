@@ -143,7 +143,7 @@ export default function Swap() {
         if (market === 'mx') return `BMV:${s}`;
       }
     } catch {}
-    return "BINANCE:ETHUSDT";
+    return "NASDAQ:AAPL";
   });
   
   // 模拟股票数据
@@ -217,11 +217,14 @@ export default function Swap() {
 
   const refreshBalancesFromServer = useCallback(async () => {
     try {
-      const uid = await resolveUid();
-      if (!uid) return;
       let data;
-      try { data = await api.get(`/admin/users/${uid}/balances`); }
-      catch { data = await api.get(`/me/balances`); }
+      try {
+        data = await api.get(`/me/balances`);
+      } catch {
+        const uid = await resolveUid();
+        if (!uid) return;
+        data = await api.get(`/admin/users/${uid}/balances`);
+      }
       try { setTradingDisabled(!!data?.disabled); } catch {}
       const arr = Array.isArray(data?.balances) ? data.balances : [];
       const map = arr.reduce((m, r) => { m[String(r.currency).toUpperCase()] = Number(r.amount || 0); return m; }, {});
@@ -654,33 +657,8 @@ export default function Swap() {
 
   // 抓取后端余额（与 Home 相同接口）
   useEffect(() => {
-    let stopped = false;
-    const fetchBalances = async () => {
-      try {
-        let uid = Number(session?.id ?? session?.backendId);
-        if (!uid && session?.phone) {
-          try {
-            const res = await api.get(`/admin/users?q=${encodeURIComponent(session.phone)}`);
-            const arr = Array.isArray(res?.users) ? res.users : [];
-            const match = arr.find(u => String(u.phone) === String(session.phone));
-            if (match && Number(match.id)) {
-              uid = Number(match.id);
-            }
-          } catch {}
-        }
-        if (!uid) return;
-        const data = await api.get(`/admin/users/${uid}/balances`);
-        const arr = Array.isArray(data?.balances) ? data.balances : [];
-        const map = arr.reduce((m, r) => { m[String(r.currency).toUpperCase()] = Number(r.amount || 0); return m; }, {});
-        if (stopped) return;
-        setBalanceMXN(Number.isFinite(map.MXN) ? map.MXN : 0);
-        setBalanceUSD(Number.isFinite(map.USD) ? map.USD : 0);
-        setBalanceUSDT(Number.isFinite(map.USDT) ? map.USDT : 0);
-      } catch {}
-    };
-    if (session) fetchBalances();
-    return () => { stopped = true; };
-  }, [session]);
+    refreshBalancesFromServer();
+  }, [refreshBalancesFromServer, session]);
 
   // ---- 限价单成交检查（服务端持久化）：每2s刷新订单并根据触发条件调用后端成交（未登录不轮询） ----
   const ordersRef = useRef([]);

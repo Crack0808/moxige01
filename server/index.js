@@ -71,6 +71,8 @@ function backupDatabaseFile() {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FRONTEND_DIST = path.resolve(__dirname, 'moxige', 'dist');
+const UPLOADS_DIR = path.resolve(__dirname, 'data', 'uploads');
+try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch {}
 
 function runMigrations() {
   db.pragma('journal_mode = WAL');
@@ -488,6 +490,17 @@ app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => 
     address TEXT,
     created_at TEXT
   );`);
+
+  // 用户银行卡（仅用于提现绑定）
+  db.exec(`CREATE TABLE IF NOT EXISTS user_bank_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    bin TEXT,
+    last4 TEXT,
+    holder_name TEXT,
+    bank_name TEXT,
+    created_at TEXT
+  );`);
 }
 
 try { backupDatabaseFile(); runMigrations(); } catch (e) { console.error('[mxg-backend] migration failed:', e?.message || e); }
@@ -772,6 +785,7 @@ app.use((err, req, res, next) => {
 
 // Serve static frontend assets if build exists
 app.use(express.static(FRONTEND_DIST, { index: 'index.html', maxAge: '1h' }));
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 
 function sha256(text) { return crypto.createHash('sha256').update(String(text || ''), 'utf8').digest('hex'); }
 function isBcryptHash(h) { return typeof h === 'string' && /^\$2[aby]\$/.test(h); }
@@ -1052,12 +1066,13 @@ app.get('/api/dev/seed', (req, res) => {
 app.post('/api/auth/register_phone', (req, res) => {
   const { phone, password, name } = req.body || {};
   if (!phone || !password) return res.status(400).json({ ok: false, error: 'phone and password required' });
-  if (String(phone).length !== 10) return res.status(400).json({ ok: false, error: 'phone must be 10 digits' });
-  const exists = db.prepare('SELECT id FROM users WHERE phone = ?').get(String(phone));
+  const digits = String(phone).replace(/\D+/g, '');
+  if (!/^\d{10,11}$/.test(digits)) return res.status(400).json({ ok: false, error: 'phone must be 10-11 digits' });
+  const exists = db.prepare('SELECT id FROM users WHERE phone = ?').get(String(digits));
   if (exists) return res.status(409).json({ ok: false, error: 'phone exists' });
   const now = new Date().toISOString();
   const stmt = db.prepare('INSERT INTO users (email, password_hash, name, created_at, updated_at, phone, role) VALUES (?, ?, ?, ?, ?, ?, ?)');
-  const info = stmt.run(`${phone}@phone.local`, hashPassword(password), name || 'User', now, now, String(phone), 'customer');
+  const info = stmt.run(`${digits}@phone.local`, hashPassword(password), name || 'User', now, now, String(digits), 'customer');
   const uid = info.lastInsertRowid;
   const user = db.prepare('SELECT id, phone, name, role FROM users WHERE id = ?').get(uid);
   res.json({ ok: true, user });
@@ -1099,7 +1114,7 @@ app.post('/api/auth/login_account', rateLimitLogin, (req, res) => {
   const { account, password } = req.body || {};
   if (!account || !password) return res.status(400).json({ ok: false, error: 'account and password required' });
   const acc = String(account).trim();
-  const isPhone = /^[0-9]{10}$/.test(acc);
+  const isPhone = /^[0-9]{10,11}$/.test(acc);
   const ip = getClientIp(req);
   const lock = checkLoginLocked(getThrottleKeyForAccount(acc), ip);
   if (lock.locked) {
@@ -1135,7 +1150,7 @@ app.post('/api/admin/login_account', rateLimitLogin, (req, res) => {
   const { account, password, otp } = req.body || {};
   if (!account || !password) return res.status(400).json({ ok: false, error: 'account and password required' });
   const acc = String(account).trim();
-  const isPhone = /^[0-9]{10}$/.test(acc);
+  const isPhone = /^[0-9]{10,11}$/.test(acc);
   const ip = getClientIp(req);
   const lock = checkLoginLocked(getThrottleKeyForAccount(acc), ip);
   if (lock.locked) return res.status(429).json({ ok: false, error: 'login_locked', remainMs: Number(lock.remain || 0) });
@@ -1426,10 +1441,20 @@ app.post('/api/me/avatar', requireAuth, (req, res) => {
     let buf;
     try { buf = Buffer.from(m[3], 'base64'); } catch { return res.status(400).json({ ok: false, error: 'bad base64' }); }
     if (!buf || buf.length === 0) return res.status(400).json({ ok: false, error: 'empty data' });
-    if (buf.length > 256 * 1024) return res.status(413).json({ ok: false, error: 'too large' });
+    if (buf.length > 2 * 1024 * 1024) return res.status(413).json({ ok: false, error: 'too large' });
+    const uid = Number(req.user.id);
+    const ext = mime.includes('png') ? '.png' : '.jpg';
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+    const userDir = path.join(UPLOADS_DIR, 'users', String(uid));
+    try { fs.mkdirSync(userDir, { recursive: true }); } catch {}
+    const filename = `avatar_${stamp}${ext}`;
+    const absPath = path.join(userDir, filename);
+    fs.writeFileSync(absPath, buf);
+    const publicPath = `/uploads/users/${uid}/${filename}`;
     const now = new Date().toISOString();
-    db.prepare('UPDATE users SET avatar=?, avatar_mime=?, avatar_updated_at=?, updated_at=? WHERE id=?').run(raw, mime, now, now, Number(req.user.id));
-    res.json({ ok: true, size: buf.length, mime });
+    db.prepare('UPDATE users SET avatar=?, avatar_mime=?, avatar_updated_at=?, updated_at=? WHERE id=?').run(publicPath, mime, now, now, uid);
+    res.json({ ok: true, path: publicPath, size: buf.length, mime });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
@@ -3973,26 +3998,51 @@ try {
   }
 } catch {}
 
-app.use((req, res) => {
-  res.status(404).json({ ok: false, error: 'Not Found' });
-});
 function getBalances(uid) {
   try {
+    // 优先兼容行式存储：balances(user_id, currency, amount)
+    let rows = [];
+    try { rows = db.prepare('SELECT currency, amount FROM balances WHERE user_id = ?').all(uid); } catch {}
+    if (Array.isArray(rows) && rows.length > 0 && rows[0] && (rows[0].currency !== undefined)) {
+      const map = rows.reduce((m, r) => {
+        const k = String(r.currency || '').toUpperCase();
+        const n = (() => { try { return Number(String(r.amount || 0).replace(/,/g, '')); } catch { return Number(r.amount || 0); } })();
+        m[k] = Number(m[k] || 0) + Number(n || 0);
+        return m;
+      }, {});
+      return { usd: Number(map.USD || 0), mxn: Number(map.MXN || 0), usdt: Number(map.USDT || 0) };
+    }
+    // 回退到列式存储：balances(user_id, usd, mxn, usdt)
     const r = db.prepare('SELECT usd, mxn, usdt FROM balances WHERE user_id = ?').get(uid);
     return { usd: Number(r?.usd || 0), mxn: Number(r?.mxn || 0), usdt: Number(r?.usdt || 0) };
   } catch { return { usd: 0, mxn: 0, usdt: 0 }; }
 }
 function updateBalance(uid, currency, delta) {
   const now = new Date().toISOString();
-  if (currency === 'USD') {
+  const c = String(currency || '').toUpperCase();
+  // 尝试行式更新
+  try {
+    const exist = db.prepare('SELECT id FROM balances WHERE user_id = ? AND UPPER(currency) = ?').get(uid, c);
+    const curMap = getBalances(uid);
+    const curVal = c === 'USD' ? curMap.usd : (c === 'MXN' ? curMap.mxn : curMap.usdt);
+    const next = Number(curVal) + Number(delta);
+    if (exist && exist.id != null) {
+      db.prepare('UPDATE balances SET amount = ?, updated_at = ? WHERE id = ?').run(next, now, Number(exist.id));
+    } else {
+      db.prepare('INSERT INTO balances (user_id, currency, amount, updated_at) VALUES (?, ?, ?, ?)').run(uid, c, next, now);
+    }
+    return;
+  } catch {}
+  // 回退列式更新
+  if (c === 'USD') {
     const cur = getBalances(uid).usd + delta;
     db.prepare('INSERT INTO balances (user_id, usd, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET usd = ?, updated_at = ?')
       .run(uid, cur, now, cur, now);
-  } else if (currency === 'MXN') {
+  } else if (c === 'MXN') {
     const cur = getBalances(uid).mxn + delta;
     db.prepare('INSERT INTO balances (user_id, mxn, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET mxn = ?, updated_at = ?')
       .run(uid, cur, now, cur, now);
-  } else if (currency === 'USDT') {
+  } else if (c === 'USDT') {
     const cur = getBalances(uid).usdt + delta;
     db.prepare('INSERT INTO balances (user_id, usdt, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET usdt = ?, updated_at = ?')
       .run(uid, cur, now, cur, now);
@@ -4007,6 +4057,7 @@ app.post('/api/me/withdraw/create', requireAuth, (req, res) => {
     if (!['USD','MXN','USDT'].includes(c) || !Number.isFinite(a) || a <= 0) return res.status(400).json({ ok:false, error:'bad_request' });
     if (c === 'USDT') { if (!usdt_address || !usdt_network) return res.status(400).json({ ok:false, error:'bad_request' }); }
     const bal = getBalances(uid);
+    try { console.log('[withdraw:create] uid=', uid, 'c=', c, 'a=', a, 'bal=', bal); } catch {}
     const cur = c === 'USD' ? bal.usd : (c === 'MXN' ? bal.mxn : bal.usdt);
     if (cur < a) return res.status(400).json({ ok:false, error:'insufficient_balance' });
     const now = new Date().toISOString();
@@ -4085,4 +4136,112 @@ app.post('/api/admin/withdraw/:id/reject', requireRoles(['super','admin']), (req
     db.prepare('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, ?, ?, ?)').run(Number(r.user_id), 'withdraw_rejected', msg, now);
     res.json({ ok:true });
   } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+});
+
+// ---- Me: Bank cards ----
+app.get('/api/me/bank-cards', requireAuth, (req, res) => {
+  try {
+    const uid = Number(req.user.id);
+    const rows = db.prepare('SELECT id, bin, last4, holder_name, bank_name, created_at FROM user_bank_cards WHERE user_id = ? ORDER BY id DESC').all(uid);
+    res.json({ ok: true, cards: rows });
+  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+});
+app.post('/api/me/bank-cards', requireAuth, (req, res) => {
+  try {
+    const uid = Number(req.user.id);
+    const { cardNumber, holderName, bankName } = req.body || {};
+    const num = String(cardNumber || '').replace(/\s+/g,'');
+    if (!holderName || !bankName) return res.status(400).json({ ok:false, error:'invalid payload' });
+    const bin = num ? String(num).slice(0,6) : '';
+    const last4 = num ? String(num).slice(-4) : '';
+    const now = new Date().toISOString();
+    const info = db.prepare('INSERT INTO user_bank_cards (user_id, bin, last4, holder_name, bank_name, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(uid, bin, last4, String(holderName||''), String(bankName||''), now);
+    const row = db.prepare('SELECT id, bin, last4, holder_name, bank_name, created_at FROM user_bank_cards WHERE id = ?').get(info.lastInsertRowid);
+    res.json({ ok:true, card: row });
+  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+});
+app.put('/api/me/bank-cards/:id', requireAuth, (req, res) => {
+  try {
+    const uid = Number(req.user.id);
+    const id = Number(req.params.id);
+    const { cardNumber, holderName, bankName } = req.body || {};
+    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' });
+    const row = db.prepare('SELECT id FROM user_bank_cards WHERE id = ? AND user_id = ?').get(id, uid);
+    if (!row) return res.status(404).json({ ok:false, error:'not found' });
+    const num = String(cardNumber || '').replace(/\s+/g,'');
+    const bin = num ? String(num).slice(0,6) : undefined;
+    const last4 = num ? String(num).slice(-4) : undefined;
+    const sets = []; const params = [];
+    if (holderName != null) { sets.push('holder_name=?'); params.push(String(holderName||'')); }
+    if (bankName != null) { sets.push('bank_name=?'); params.push(String(bankName||'')); }
+    if (bin !== undefined) { sets.push('bin=?'); params.push(bin); }
+    if (last4 !== undefined) { sets.push('last4=?'); params.push(last4); }
+    params.push(id, uid);
+    if (sets.length) db.prepare(`UPDATE user_bank_cards SET ${sets.join(', ')} WHERE id=? AND user_id=?`).run(...params);
+    const updated = db.prepare('SELECT id, bin, last4, holder_name, bank_name, created_at FROM user_bank_cards WHERE id = ? AND user_id = ?').get(id, uid);
+    res.json({ ok:true, card: updated });
+  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+});
+app.delete('/api/me/bank-cards/:id', requireAuth, (req, res) => {
+  try {
+    const uid = Number(req.user.id);
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' });
+    db.prepare('DELETE FROM user_bank_cards WHERE id = ? AND user_id = ?').run(id, uid);
+    res.json({ ok:true });
+  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+});
+
+app.get('/api/admin/invite/commissions', requireRoles(['super','admin']), (req, res) => {
+  try {
+    const status = String(req.query.status || '').trim();
+    const currency = String(req.query.currency || '').trim().toUpperCase();
+    const q = String(req.query.q || '').trim();
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize || 20)));
+    const offset = (page - 1) * pageSize;
+    const where = [];
+    const params = [];
+    if (status) { where.push('cr.status = ?'); params.push(status); }
+    if (currency) { where.push('UPPER(cr.currency) = ?'); params.push(currency); }
+    if (q) { where.push('(UPPER(inv.name) LIKE ? OR UPPER(inv.phone) LIKE ? OR UPPER(rec.name) LIKE ? OR UPPER(rec.phone) LIKE ?)'); params.push(`%${q.toUpperCase()}%`, `%${q.toUpperCase()}%`, `%${q.toUpperCase()}%`, `%${q.toUpperCase()}%`); }
+    const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
+    const sql = `SELECT cr.id, cr.inviter_id AS inviterId, cr.invitee_id AS inviteeId, cr.source, cr.order_id AS orderId, cr.currency, cr.amount, cr.status, cr.frozen_until, cr.created_at, cr.released_at,
+      inv.name AS inviterName, inv.phone AS inviterPhone, rec.name AS inviteeName, rec.phone AS inviteePhone
+      FROM commission_records cr
+      LEFT JOIN users inv ON cr.inviter_id = inv.id
+      LEFT JOIN users rec ON cr.invitee_id = rec.id ${whereSql} ORDER BY cr.id DESC LIMIT ? OFFSET ?`;
+    const rows = db.prepare(sql).all(...params, pageSize, offset);
+    const total = db.prepare(`SELECT COUNT(1) AS c FROM commission_records cr LEFT JOIN users inv ON cr.inviter_id = inv.id LEFT JOIN users rec ON cr.invitee_id = rec.id ${whereSql}`).get(...params)?.c || 0;
+    const now = Date.now();
+    const items = rows.map(r => {
+      let remainMs = 0;
+      if (r.status === 'frozen' && r.frozen_until) { const t = Date.parse(r.frozen_until); if (Number.isFinite(t)) remainMs = Math.max(0, t - now); }
+      const maskPhone = (s) => { const x = String(s || ''); return x.length >= 7 ? (x.slice(0,3) + '****' + x.slice(-2)) : x; };
+      return {
+        id: r.id,
+        inviterId: r.inviterId,
+        inviterName: r.inviterName || '',
+        inviterPhone: r.inviterPhone || '',
+        inviteeId: r.inviteeId,
+        inviteeName: r.inviteeName || '',
+        inviteePhoneMasked: maskPhone(r.inviteePhone),
+        source: r.source,
+        orderId: r.orderId,
+        currency: String(r.currency || '').toUpperCase(),
+        amount: Number(r.amount || 0),
+        status: r.status,
+        frozen_until: r.frozen_until || null,
+        remain_ms: remainMs,
+        created_at: r.created_at,
+        released_at: r.released_at || null
+      };
+    });
+    res.json({ items, total, page, pageSize });
+  } catch (e) { res.status(500).json({ error:String(e?.message||e) }); }
+});
+
+// Final 404 handler (must be registered last)
+app.use((req, res) => {
+  res.status(404).json({ ok: false, error: 'Not Found' });
 });

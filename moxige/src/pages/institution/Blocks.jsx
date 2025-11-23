@@ -236,8 +236,8 @@ export default function InstitutionBlocks() {
   }
 
   return (
-    <div className="screen top-align">
-      <button className="back-btn" onClick={()=>nav(-1)} aria-label="back"><span className="back-icon"></span></button>
+    <div className="screen top-align" style={{ paddingTop: 6 }}>
+      <button className="back-btn" onClick={()=>nav(-1)} aria-label="back" style={{ transform:'scale(0.9)', left: 8, top: 8 }}><span className="back-icon"></span></button>
       {toast.show && (<div className={`top-toast ${toast.type}`}>{toast.text}</div>)}
       <div className="inst-container">
         <div>
@@ -270,7 +270,7 @@ export default function InstitutionBlocks() {
                   <div key={it.id} className="card" style={{ display: 'grid', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ fontWeight: 700 }}>{labels.symbol}: {baseSymbol}</div>
-                      <div className="tag" style={{ background: market==='crypto' ? '#2a3b56' : '#2a5640' }}>{labels.type}: {market==='crypto' ? labels.typeCrypto : labels.typeUS}</div>
+                      <div className="tag" style={{ background: market==='crypto' ? '#2a3b56' : '#2a5640', transform:'scale(0.92)', whiteSpace:'nowrap' }}>{labels.type}: {market==='crypto' ? labels.typeCrypto : labels.typeUS}</div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       <div className="desc">{labels.currentPrice}: {currentPrice ? (market==='crypto' ? formatUSDT(currentPrice, lang) : formatMoney(currentPrice, 'USD', lang)) : '-'}</div>
@@ -293,10 +293,10 @@ export default function InstitutionBlocks() {
                         placeholder={lang==='zh' ? '请输入认购密钥' : 'Enter subscription key'}
                         value={keyMap[it.id] || ''}
                         onChange={e => setKeyMap(p => ({ ...p, [it.id]: e.target.value }))}
-                        style={{ WebkitTextSecurity: 'disc' }}
+                        style={{ WebkitTextSecurity: 'disc', maxWidth: 320 }}
                       />
                       <label className="label">{labels.qty}</label>
-                      <input className="input" type="number" min={minQty} step="1" placeholder={String(minQty)} value={qtyMap[it.id] || ''} onChange={e => setQtyMap(p => ({ ...p, [it.id]: e.target.value }))} />
+                      <input className="input" type="number" min={minQty} step="1" placeholder={String(minQty)} value={qtyMap[it.id] || ''} onChange={e => setQtyMap(p => ({ ...p, [it.id]: e.target.value }))} style={{ maxWidth: 240 }} />
                       <div className="sub-actions" style={{ justifyContent: 'flex-end' }}>
                         <button className="btn primary" disabled={submittingId === it.id} onClick={() => submit(it)}>
                           {submittingId === it.id ? labels.submitting : labels.btnSubmit}
