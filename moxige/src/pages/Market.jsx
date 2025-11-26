@@ -95,27 +95,37 @@ export default function Market() {
   const fetchMxInvestNews = useCallback(async () => {
     try {
       setNewsLoading(true);
-      // Google News RSS for Mexico investment/finance (es-419)
-      const url = 'https://news.google.com/rss/search?q=inversi%C3%B3n%20OR%20finanzas%20site:mx&hl=es-419&gl=MX&ceid=MX:es-419';
-      const xml = await fetch(url).then(r => r.text());
-      const doc = new window.DOMParser().parseFromString(xml, 'text/xml');
-      const items = Array.from(doc.querySelectorAll('item'));
-      const list = items.slice(0, 20).map(it => {
-        const title = it.querySelector('title')?.textContent || '';
-        const link = it.querySelector('link')?.textContent || '';
-        const desc = it.querySelector('description')?.textContent || '';
-        const pubDate = it.querySelector('pubDate')?.textContent || '';
-        const enclosure = it.querySelector('enclosure');
-        const media = it.querySelector('media\\:content');
-        const img = enclosure?.getAttribute('url') || media?.getAttribute('url') || `https://picsum.photos/seed/${encodeURIComponent(title||link)}/600/400`;
-        return { title, link, desc, pubDate, img };
-      });
-      setNews(list);
-      setNewsIndex(0);
       setShowNewsList(true);
-    } catch {
       setNews([]);
-      setShowNewsList(true);
+      const cacheKey = `market:news:${market}`;
+      const cached = (() => { try { return JSON.parse(localStorage.getItem(cacheKey)||'null')||null } catch { return null } })();
+      const r = await fetch(`/api/news/feed?market=${encodeURIComponent(market)}&lang=${encodeURIComponent(lang)}`);
+      const j = await r.json().catch(()=>({ items: [] }));
+      let list = Array.isArray(j?.items) ? j.items.slice(0, 30) : [];
+      if (!list.length) {
+        const r2 = await fetch(`/api/news/mx?lang=${encodeURIComponent(lang)}`).catch(()=>null);
+        const j2 = r2 ? await r2.json().catch(()=>({ items: [] })) : { items: [] };
+        list = Array.isArray(j2.items) ? j2.items.slice(0, 30) : [];
+      }
+      if (list.length) {
+        setNews(list);
+        setNewsIndex(0);
+        try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), items: list })) } catch {}
+      } else if (cached && Array.isArray(cached.items) && cached.items.length) {
+        setNews(cached.items);
+        setNewsIndex(0);
+      } else {
+        setNews([]);
+      }
+    } catch {
+      const cacheKey = `market:news:${market}`;
+      const cached = (() => { try { return JSON.parse(localStorage.getItem(cacheKey)||'null')||null } catch { return null } })();
+      if (cached && Array.isArray(cached.items) && cached.items.length) {
+        setNews(cached.items);
+        setNewsIndex(0);
+      } else {
+        setNews([]);
+      }
     } finally { setNewsLoading(false); }
   }, []);
 
@@ -233,6 +243,7 @@ export default function Market() {
     setError("");
     if (firstLoadRef.current) setLoading(true);
     setLoadedCount(0); setHasMore(true); setLoadingMore(false);
+    setRows([]);
     try {
       if (market === "crypto") {
         const bases = ["BTC","ETH","BNB","SOL","XRP","ADA","DOGE","TON","LTC","TRX"];
@@ -622,9 +633,9 @@ export default function Market() {
           <div className="market-tabs" role="tablist" aria-label="top-switch">
             <div className="dropdown-nav">
               <button 
-                className={`pill dropdown-trigger active`} 
+                className={`pill dropdown-trigger ${!showNewsList ? 'active' : ''}`} 
                 onClick={() => {
-                  // 移动端点击切换下拉菜单显示
+                  setShowNewsList(false);
                   if (window.innerWidth <= 767) {
                     setShowMobileDropdown(!showMobileDropdown);
                   }
@@ -637,14 +648,17 @@ export default function Market() {
                   <span className="dropdown-label">{t("labelMarket")}</span>
                   <button className={`dropdown-item ${market === "mx" ? "active" : ""}`} onClick={() => {
                     setMarket("mx");
+                    setShowNewsList(false);
                     setShowMobileDropdown(false);
                   }}>{t("marketMX")}</button>
                   <button className={`dropdown-item ${market === "us" ? "active" : ""}`} onClick={() => {
                     setMarket("us");
+                    setShowNewsList(false);
                     setShowMobileDropdown(false);
                   }}>{t("marketUS")}</button>
                   <button className={`dropdown-item ${market === "crypto" ? "active" : ""}`} onClick={() => {
                     setMarket("crypto");
+                    setShowNewsList(false);
                     setShowMobileDropdown(false);
                   }}>{t("marketCrypto")}</button>
                 </div>
@@ -683,7 +697,7 @@ export default function Market() {
               </div>
             </div>
             <div style={{ marginLeft: 8 }}>
-              <button className="pill" onClick={fetchMxInvestNews} aria-busy={newsLoading}>{t('news') || (lang==='es'?'Noticias':'News')}</button>
+              <button className={`pill ${showNewsList ? 'active' : ''}`} onClick={fetchMxInvestNews} aria-busy={newsLoading}>{t('news') || (lang==='es'?'Noticias':'News')}</button>
             </div>
           </div>
         </div>
@@ -875,6 +889,7 @@ export default function Market() {
       )}
 
       {showNewsList && (
+        <div className="market-content" style={{ position:'relative' }}>
         <div className="card" style={{ marginTop: 12 }}>
           <h2 className="title" style={{ marginTop: 0 }}>{t('news') || (lang==='es'?'Noticias':'News')}</h2>
           <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
@@ -895,6 +910,7 @@ export default function Market() {
               ))}
             </div>
           )}
+        </div>
         </div>
       )}
 
@@ -921,7 +937,6 @@ export default function Market() {
                       <div className="desc" style={{ lineHeight:1.6 }}>{it.desc?.replace(/<[^>]+>/g,'')?.slice(0,200)}...</div>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                         <button className="pill" onClick={()=>setNewsIndex(i => Math.max(0, i-1))} disabled={newsIndex<=0}>{t('prev')||'Prev'}</button>
-                        <a className="pill" href={it.link} target="_blank" rel="noopener noreferrer">{t('open')||'Open'}</a>
                         <button className="pill" onClick={()=>setNewsIndex(i => Math.min(news.length-1, i+1))} disabled={newsIndex>=news.length-1}>{t('next')||'Next'}</button>
                       </div>
                     </div>

@@ -972,6 +972,138 @@ app.get('/api/me', requireAuth, (req, res) => {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
+let newsCache = { mx: { ts: 0, items: [] } }
+app.get('/api/news/mx', async (req, res) => {
+  try {
+    const ttl = Math.max(60000, Number(req.query.ttl || 600000))
+    const now = Date.now()
+    if (now - (newsCache.mx.ts || 0) < ttl && Array.isArray(newsCache.mx.items) && newsCache.mx.items.length) {
+      return res.json({ items: newsCache.mx.items })
+    }
+    const langParam = String(req.query.lang || '').toLowerCase()
+    const isEs = langParam === 'es' || langParam === 'es-419' || langParam === 'es-mx'
+    const hl = isEs ? 'es-419' : 'en'
+    const ceid = isEs ? 'MX:es-419' : 'MX:en'
+    const gl = 'MX'
+    const defaultQEs = '(bolsa OR mercados OR inversión OR finanzas OR BMV OR acciones) (site:eleconomista.com.mx OR site:elfinanciero.com.mx OR site:expansion.mx OR site:forbes.com.mx OR site:reuters.com OR site:bloomberg.com OR site:investing.com OR site:yahoo.com/finance)'
+    const defaultQEn = '(stock OR market OR investment OR finance OR BMV OR IPC OR equities) (site:reuters.com OR site:bloomberg.com OR site:investing.com OR site:yahoo.com/finance OR site:wsj.com OR site:ft.com)'
+    const q = String(req.query.q || '').trim() || (isEs ? defaultQEs : defaultQEn)
+    const url = 'https://news.google.com/rss/search?' + new URLSearchParams({ q, hl, gl, ceid }).toString()
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0 Safari/537.36' } })
+    let xml = await r.text()
+    if (!/<rss/i.test(xml) || !/<item/i.test(xml)) {
+      const r2 = await fetch('https://news.google.com/rss?hl=es-419&gl=MX&ceid=MX:es-419', { headers: { 'User-Agent': 'Mozilla/5.0' } })
+      xml = await r2.text()
+    }
+    let items = []
+    const m = xml.match(/<item[\s\S]*?<\/item>/g) || []
+    for (const it of m.slice(0, 50)) {
+      const pick = (tag) => { const mm = it.match(new RegExp('<' + tag + '>([\s\S]*?)<\/' + tag + '>', 'i')); return mm ? mm[1] : '' }
+      const attr = (tag, name) => { const mm = it.match(new RegExp('<' + tag + '[^>]*' + name + '=\"([^\"]+)\"[^>]*>', 'i')); return mm ? mm[1] : '' }
+      const title = pick('title')
+      const link = pick('link')
+      const desc = pick('description')
+      const pubDate = pick('pubDate')
+      let img = attr('enclosure','url') || attr('media:content','url') || attr('media:thumbnail','url')
+      if (!img) img = 'https://picsum.photos/seed/' + encodeURIComponent(title || link) + '/600/400'
+      items.push({ title, link, desc, pubDate, img })
+    }
+    const kw = /(bolsa|mercados|mercado|inversión|finanzas|BMV|IPC|acciones|divisas|bonos|tasas|ganancias|pérdidas|trimestrales|resultado|emisión|capital|volumen|cotización|apertura|cierre)/i
+    items = items.filter(it => kw.test(String(it.title||'')) || kw.test(String(it.desc||'')))
+    for (let i = 0; i < Math.min(items.length, 20); i++) {
+      try {
+        const it = items[i]
+        if (!it || !it.link) continue
+        if (it.img && !/picsum\.photos/.test(String(it.img||''))) continue
+        const dimg = String(it.desc||'').match(/<img[^>]*src=["']([^"']+)["']/i)
+        if (dimg && dimg[1]) { it.img = dimg[1]; continue }
+        const ac = new AbortController()
+        const t = setTimeout(() => ac.abort(), 1500)
+        let html = ''
+        try {
+          const resp = await fetch(it.link, { signal: ac.signal, headers: { 'User-Agent': 'Mozilla/5.0' } })
+          html = await resp.text()
+        } catch {}
+        clearTimeout(t)
+        if (html) {
+          const mOg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+                      || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+          if (mOg && mOg[1]) { items[i].img = mOg[1] }
+        }
+      } catch {}
+    }
+    if (!items.length) {
+      items = [
+        { title: 'Mercado abre al alza', link: 'https://example.com/mx/mercado-alza', desc: 'Los principales índices mexicanos iniciaron la jornada con avances.', pubDate: new Date().toUTCString(), img: 'https://picsum.photos/seed/mx1/600/400' },
+        { title: 'Peso gana frente al dólar', link: 'https://example.com/mx/peso-dolar', desc: 'El tipo de cambio favorece al peso por segunda sesión consecutiva.', pubDate: new Date().toUTCString(), img: 'https://picsum.photos/seed/mx2/600/400' },
+        { title: 'Resultados trimestrales impulsan acciones', link: 'https://example.com/mx/resultados', desc: 'Varias emisoras reportaron resultados por encima de lo esperado.', pubDate: new Date().toUTCString(), img: 'https://picsum.photos/seed/mx3/600/400' }
+      ]
+    }
+    newsCache.mx = { ts: now, items }
+    return res.json({ items })
+  } catch (e) {
+    let items = Array.isArray(newsCache.mx.items) ? newsCache.mx.items : []
+    if (!items.length) {
+      items = [
+        { title: 'Mercado abre al alza', link: 'https://example.com/mx/mercado-alza', desc: 'Los principales índices mexicanos iniciaron la jornada con avances.', pubDate: new Date().toUTCString(), img: 'https://picsum.photos/seed/mx1/600/400' },
+        { title: 'Peso gana frente al dólar', link: 'https://example.com/mx/peso-dolar', desc: 'El tipo de cambio favorece al peso por segunda sesión consecutiva.', pubDate: new Date().toUTCString(), img: 'https://picsum.photos/seed/mx2/600/400' },
+        { title: 'Resultados trimestrales impulsan acciones', link: 'https://example.com/mx/resultados', desc: 'Varias emisoras reportaron resultados por encima de lo esperado.', pubDate: new Date().toUTCString(), img: 'https://picsum.photos/seed/mx3/600/400' }
+      ]
+      newsCache.mx = { ts: Date.now(), items }
+    }
+    return res.json({ items })
+  }
+})
+
+const FINNHUB_TOKEN = String(process.env.FINNHUB_TOKEN || '').trim()
+let feedCache = new Map()
+app.get('/api/news/feed', async (req, res) => {
+  try {
+    const market = String(req.query.market || 'us').trim().toLowerCase()
+    const key = 'feed:' + market
+    const ttl = Math.max(60000, Number(req.query.ttl || 300000))
+    const now = Date.now()
+    const cached = feedCache.get(key)
+    if (cached && now - (cached.ts || 0) < ttl && Array.isArray(cached.items) && cached.items.length) {
+      return res.json({ items: cached.items })
+    }
+    if (FINNHUB_TOKEN) {
+      let category = 'general'
+      if (market === 'crypto') category = 'crypto'
+      else if (market === 'fx' || market === 'forex') category = 'forex'
+      const u = new URL('https://finnhub.io/api/v1/news')
+      u.searchParams.set('category', category)
+      u.searchParams.set('token', FINNHUB_TOKEN)
+      let items = []
+      try {
+        const r = await fetch(u.toString())
+        const j = await r.json()
+        const arr = Array.isArray(j) ? j : []
+        items = arr.slice(0, 50).map(x => ({
+          title: String(x.headline || ''),
+          link: String(x.url || ''),
+          desc: String(x.summary || ''),
+          pubDate: new Date((Number(x.datetime || 0) * 1000) || Date.now()).toUTCString(),
+          img: String(x.image || ''),
+          source: String(x.source || ''),
+          related: String(x.related || ''),
+        }))
+      } catch {}
+      const kw = /(stock|equity|market|bolsa|mercados|mercado|invest|inversión|finanzas|BMV|IPC|acciones|forex|crypto|bitcoin|ethereum|bonos|tasas)/i
+      items = items.filter(it => kw.test(it.title) || kw.test(it.desc) || kw.test(it.source) || kw.test(it.related))
+      if (items.length) { feedCache.set(key, { ts: now, items }); return res.json({ items }) }
+    }
+    let fallback = []
+    try {
+      const url = req.protocol + '://' + req.get('host') + '/api/news/mx'
+      const r = await fetch(url)
+      const j = await r.json()
+      fallback = Array.isArray(j.items) ? j.items : []
+    } catch {}
+    feedCache.set(key, { ts: now, items: fallback })
+    return res.json({ items: fallback })
+  } catch (e) { return res.json({ items: [] }) }
+})
 
 // 前端资产校验：用于发布后核对 index.html 与 assets 哈希是否一致
 app.get('/api/dev/assets', (req, res) => {
@@ -1998,22 +2130,27 @@ app.post('/api/admin/trade/block/orders/:id/reject', requireRoles(['super','admi
 // ---- Version info ----
 app.get('/version', (req, res) => {
   try {
-    const assetsDir = path.join(FRONTEND_DIST, 'assets');
-    const files = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir).filter(n => /\.(js|css)$/.test(n)) : [];
+    const guessDist = () => { try { return FRONTEND_DIST || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'moxige', 'dist'); } catch { return '' } };
+    const assetsDir = path.join(guessDist() || '', 'assets');
+    const files = assetsDir && fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir).filter(n => /(\.js|\.css)$/.test(n)) : [];
     const frontendAssets = files.map(f => {
       const m = f.match(/\.([a-f0-9]{8,})\./i);
       return { file: f, hash: m ? m[1] : '' };
     });
     const api = { name: 'mxg-backend', version: '1.0' };
-    const buildInfoPath = path.join(FRONTEND_DIST, 'build-info.json');
+    const buildInfoPath = path.join(guessDist() || '', 'build-info.json');
     let build = { buildTime: '' };
     try { build = JSON.parse(fs.readFileSync(buildInfoPath, 'utf8')); } catch {}
     const ts = new Date().toISOString();
     const origin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['host'] || ''}`;
     res.json({ api, frontendAssets, build, ts, origin });
   } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
+    res.json({ api: { name: 'mxg-backend', version: '1.0' }, frontendAssets: [], build: {}, ts: new Date().toISOString() });
   }
+});
+
+app.get('/api/health', (req, res) => {
+  try { res.json({ ok: true, ts: new Date().toISOString() }); } catch { res.json({ ok: true }); }
 });
 
 // ---- Admin: Staffs list/create/delete ----
@@ -2968,6 +3105,7 @@ app.get('/api/admin/kyc/list', requireRoles(adminReadRoles()), (req, res) => {
     if (from) { where.push('kr.submitted_at >= ?'); params.push(from); }
     if (to) { where.push('kr.submitted_at <= ?'); params.push(to); }
     if (q) { where.push('(u.phone = ? OR u.name LIKE ?)'); params.push(q, `%${q}%`); }
+    if (String(req.user?.role||'') === 'operator') { where.push('u.assigned_operator_id = ?'); params.push(Number(req.user.id || 0)); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const rows = db.prepare(`SELECT kr.id, kr.user_id AS userId, u.name AS userName, u.phone AS phone, kr.submitted_at, kr.status, kr.payload FROM kyc_requests kr JOIN users u ON kr.user_id = u.id ${whereSql} ORDER BY kr.submitted_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
     const items = rows.map(r => {
@@ -2995,13 +3133,17 @@ app.get('/api/admin/kyc/list', requireRoles(adminReadRoles()), (req, res) => {
 });
 
 // ---- Admin: KYC approve ----
-app.post('/api/admin/kyc/approve', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/kyc/approve', requireRoles(['super','admin','operator']), (req, res) => {
   try {
     const { id } = req.body || {};
     const rid = Number(id);
     if (!Number.isFinite(rid)) return res.status(400).json({ error: 'bad id' });
     const row = db.prepare('SELECT id, user_id, status FROM kyc_requests WHERE id = ?').get(rid);
     if (!row) return res.status(404).json({ error: 'not found' });
+    if (String(req.user?.role||'') === 'operator') {
+      const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(row.user_id))?.opId || null;
+      if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
+    }
     const now = new Date().toISOString();
     db.prepare('UPDATE kyc_requests SET status=?, reviewed_at=? WHERE id=?').run('approved', now, rid);
     try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(row.user_id, 'KYC 审核通过', '你的实名审核已通过', now); } catch {}
@@ -3012,13 +3154,17 @@ app.post('/api/admin/kyc/approve', requireRoles(['super','admin']), (req, res) =
 });
 
 // ---- Admin: KYC reject ----
-app.post('/api/admin/kyc/reject', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/kyc/reject', requireRoles(['super','admin','operator']), (req, res) => {
   try {
     const { id, notes = '' } = req.body || {};
     const rid = Number(id);
     if (!Number.isFinite(rid)) return res.status(400).json({ error: 'bad id' });
     const row = db.prepare('SELECT id, user_id, status FROM kyc_requests WHERE id = ?').get(rid);
     if (!row) return res.status(404).json({ error: 'not found' });
+    if (String(req.user?.role||'') === 'operator') {
+      const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(row.user_id))?.opId || null;
+      if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
+    }
     const now = new Date().toISOString();
     db.prepare('UPDATE kyc_requests SET status=?, reviewed_at=?, notes=? WHERE id=?').run('rejected', now, String(notes || ''), rid);
     try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(row.user_id, 'KYC 审核未通过', `原因：${String(notes || '')}`, now); } catch {}

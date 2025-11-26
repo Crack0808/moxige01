@@ -33,7 +33,19 @@ export default function Support() {
     const placeholder = encodeURIComponent(lang==='es' ? 'Escribir mensaje' : 'Enter message');
     const sendLabel = encodeURIComponent(lang==='es' ? 'Enviar' : 'Send');
     const v = Date.now();
-    return `${imBase.replace(/\/$/, '')}/customer.html?phone=${phone}&name=${name}&avatar=${avatar}&lang=${encodeURIComponent(lang)}&placeholder=${placeholder}&send=${sendLabel}&v=${v}`;
+    const base = imBase.replace(/\/$/, '');
+    let origin = '';
+    let pathPrefix = '';
+    try { const u = new URL(base); origin = u.origin; pathPrefix = u.pathname.replace(/\/$/, ''); } catch {}
+    let qs = `phone=${phone}&name=${name}&avatar=${avatar}&lang=${encodeURIComponent(lang)}&placeholder=${placeholder}&send=${sendLabel}&v=${v}`;
+    try {
+      const tok = String(localStorage.getItem('im:token') || import.meta.env?.VITE_IM_TOKEN || '').trim();
+      if (tok) qs += `&token=${encodeURIComponent(tok)}`;
+    } catch {}
+    qs += `&api=${encodeURIComponent(base)}`;
+    if (origin) qs += `&ws=${encodeURIComponent(origin)}`;
+    if (pathPrefix) qs += `&wspath=${encodeURIComponent(pathPrefix + '/socket.io/')}`;
+    return `${base}/customer.html?${qs}`;
   }, [imBase, session, lang]);
 
   return (

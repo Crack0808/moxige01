@@ -257,7 +257,10 @@
   text-align: center;
 }
 .market-tabs .pill.active { 
-  box-shadow: 0 0 0 1px rgba(91,141,239,0.5) inset, 0 6px 14px rgba(91,141,239,0.20);
+  box-shadow: 0 0 0 1px rgba(91,141,239,0.6) inset, 0 6px 14px rgba(91,141,239,0.25);
+  background: radial-gradient(100% 100% at 50% 0%, rgba(91,141,239,0.45) 0%, rgba(28,44,72,0.85) 100%);
+  border-color: #5b8def;
+  color: #eaf2ff;
 }
 
 /* 图标样式：增强识别度 */

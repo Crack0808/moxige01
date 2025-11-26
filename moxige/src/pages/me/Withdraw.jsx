@@ -88,7 +88,7 @@ export default function Withdraw() {
   async function cancel(id) { try { await meWithdrawCancel(id); await loadRecords(); } catch {} }
 
   return (
-    <div className="screen">
+    <div className="screen withdraw-screen">
       {toast.show && (
         <div style={{ position:'fixed', top:10, left:0, right:0, display:'grid', placeItems:'center', zIndex:1000 }}>
           <div className={`top-toast ${toast.type}`}>{toast.text}</div>
@@ -97,7 +97,7 @@ export default function Withdraw() {
       <div className="card">
         <div className="title" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <span>{t('withdrawTitle')}</span>
-          <button className="btn" onClick={()=>nav('/me/withdraw/records')}>{t('withdrawRecordsLink')}</button>
+          <button className="btn primary withdraw-records-btn" onClick={()=>nav('/me/withdraw/records')}>{t('withdrawRecordsLink')}</button>
         </div>
         <div className="form">
           <label>{t('currencyLabel')}</label>

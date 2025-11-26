@@ -178,6 +178,17 @@ body {
 
 .desc { color: var(--muted); }
 
+/* Withdraw page: brighten records button and fill mobile width */
+.withdraw-screen { align-items: stretch; padding: 0; }
+.withdraw-screen .card { width: 100%; max-width: 100%; border-radius: 0; padding: clamp(16px, 6vw, 32px); }
+.withdraw-records-btn { height: 36px; padding: 0 12px; border: 1px solid var(--card-border); }
+@media (max-width: 480px) {
+  .withdraw-screen { padding-bottom: 60px; }
+  .withdraw-screen .title { margin: 0 0 12px; }
+  .withdraw-screen .form { gap: 12px; }
+  .withdraw-screen .sub-actions { gap: 10px; }
+}
+
 .logo-area.enter { 
   animation: logoEnter 700ms cubic-bezier(0.22, 1, 0.36, 1) both 60ms;
 }

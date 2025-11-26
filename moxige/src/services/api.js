@@ -203,16 +203,8 @@ async function request(path, { method = 'GET', body, headers = {}, timeoutMs } =
             const isBrowser = typeof location !== 'undefined';
             const port = isBrowser ? String(location.port || '') : '';
             const host = isBrowser ? String(location.hostname || '') : '';
-            const isDevLocal = isBrowser && (port === '5173' || port === '5174') && (host === 'localhost' || host === '127.0.0.1');
-            if (isDevLocal) {
-              const alt = normalizeBase('http://127.0.0.1:5210');
-              if (String(base) !== alt) {
-                base = alt;
-                attempts++;
-                continue;
-              }
-            }
-          } catch {}
+            // 开发模式下不做跨端口切换，始终依赖 Vite 代理到 5210
+        } catch {}
           break;
         }
         const msg = isJson ? (data?.error || 'Request failed') : (looksHtml ? 'Request failed: received HTML' : String(data).slice(0, 300));

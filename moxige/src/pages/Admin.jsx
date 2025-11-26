@@ -447,33 +447,7 @@ export default function Admin() {
       if (!['MXN','USD','USDT'].includes(r.currency)) { alert('非法币种'); return; }
       if (!isFinite(r.amount) || !validateAmount(r.amount)) { alert('金额格式不正确，最多两位小数'); return; }
     }
-    // 权限与二次身份验证（仅允许后台账号，并刷新令牌）
-    if (!['admin','super'].includes(session?.role)) {
-      // 当前会话不是后台账号：要求输入后台账号 + 密码，并严格走后台登录
-      const acc = prompt('二次身份验证：请输入后台账号');
-      const pwd = prompt('二次身份验证：请输入后台密码');
-      if (!acc || !pwd || String(pwd).length < 6) { alert('身份验证失败'); return; }
-      try {
-        await loginAdminApi({ account: String(acc), password: String(pwd) });
-        try { setSession(JSON.parse(localStorage.getItem('sessionUser') || 'null')); } catch {}
-      } catch (e) {
-        alert('身份验证失败');
-        return;
-      }
-    } else {
-      // 当前已是后台账号，但仍进行一次密码确认以提升安全性
-      const pwd = prompt('二次身份验证：请输入后台密码');
-      if (!pwd || String(pwd).length < 6) { alert('身份验证失败'); return; }
-      try {
-        const accCandidate = String(session?.account || session?.phone || '').trim();
-        if (!accCandidate) { alert('当前会话缺少后台账号/手机号'); return; }
-        await loginAdminApi({ account: accCandidate, password: String(pwd) });
-        try { setSession(JSON.parse(localStorage.getItem('sessionUser') || 'null')); } catch {}
-      } catch (e) {
-        alert('身份验证失败');
-        return;
-      }
-    }
+    // 取消二次身份验证，直接按当前会话令牌提交
     if (!confirm('该操作将变更资金，是否继续？')) return;
     const reqId = Math.random().toString(36).slice(2,10) + Date.now().toString(36);
     try {
@@ -1673,7 +1647,7 @@ function InviteSettings() {
   const [form, setForm] = useState({ blockPct: 5, blockFreezeDays: 3, fundPct: 5, fundFreezeDays: 3, ipoPct: 5, ipoFreezeDays: 3 });
   const load = async () => { try { setLoading(true); const s = await api.get('/admin/settings/invite'); setForm({ blockPct: Number(s?.blockPct||0), blockFreezeDays: Number(s?.blockFreezeDays||0), fundPct: Number(s?.fundPct||0), fundFreezeDays: Number(s?.fundFreezeDays||0), ipoPct: Number(s?.ipoPct||0), ipoFreezeDays: Number(s?.ipoFreezeDays||0) }); } catch (e) { setError(String(e?.message||e)); } finally { setLoading(false); } };
   useEffect(() => { load(); }, []);
-  const save = async () => { try { setLoading(true); setError(''); await api.post('/admin/settings/invite', form); alert('已保存'); } catch (e) { setError(String(e?.message||e)); } finally { setLoading(false); } };
+  const save = async () => { try { setLoading(true); setError(''); await api.post('/admin/settings/invite', form); alert('已保存'); } catch (e) { const msg = String(e?.message||e); if (/unauthorized|forbidden|csrf/i.test(msg)) setError('请先登录管理员或超级管理员，再保存设置'); else setError(msg || '保存失败'); } finally { setLoading(false); } };
   return (
     <div className="card flat">
       <h1 className="title">邀请系统设置</h1>

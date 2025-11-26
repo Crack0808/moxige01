@@ -75,8 +75,8 @@
     }
     socket.on('connect_error', () => {
       try {
-        apiBase = apiBase || 'http://127.0.0.1:3001'
-        wsBase = wsBase || 'http://127.0.0.1:3001'
+        apiBase = apiBase || 'http://127.0.0.1:3000'
+        wsBase = wsBase || 'http://127.0.0.1:3000'
         try { socket.disconnect() } catch {}
         socket = makeSocket()
         socket.on('connect', () => { if (currentPhone) socket.emit('join', { phone: currentPhone, role: 'customer' }) })
@@ -117,14 +117,18 @@
       const c=document.createElement('button'); c.textContent='取消'; c.id='previewCancelBtn'; c.type='button'; c.style.minWidth='84px'; c.style.height='32px'; c.style.borderRadius='8px'; c.style.background='#0d2545'; c.style.color='#e6f1ff'; c.style.border='1px solid #1e3b68'; c.style.cursor='pointer';
       const s=document.createElement('button'); s.textContent='发送图片'; s.id='previewSendBtn'; s.type='button'; s.style.minWidth='96px'; s.style.height='32px'; s.style.borderRadius='8px'; s.style.background='#2e7de9'; s.style.color='#fff'; s.style.border='none'; s.style.cursor='pointer';
       a.appendChild(c); a.appendChild(s); b.appendChild(i); b.appendChild(a); o.appendChild(b); document.body.appendChild(o); o._img=i; o._send=s; o._cancel=c; 
-      try { c.onclick = () => { cancelPreview() } } catch {}
-      try { c.addEventListener('pointerdown', (e) => { e.stopPropagation(); cancelPreview() }) } catch {}
-      try { c.addEventListener('touchstart', (e) => { e.stopPropagation(); cancelPreview() }) } catch {}
-      try { s.onclick = () => { sendCurrentFile() } } catch {}
-      try { s.addEventListener('pointerdown', (e) => { e.stopPropagation(); sendCurrentFile() }) } catch {}
-      try { s.addEventListener('touchstart', (e) => { e.stopPropagation(); sendCurrentFile() }) } catch {}
+      try { c.onclick = (e) => { e && e.stopPropagation && e.stopPropagation(); cancelPreview() } } catch {}
+      try { c.addEventListener('pointerup', (e) => { e.stopPropagation(); cancelPreview() }, { capture: true }) } catch {}
+      try { c.addEventListener('touchend', (e) => { e.stopPropagation(); cancelPreview() }, { capture: true }) } catch {}
+      try { s.onclick = (e) => { e && e.stopPropagation && e.stopPropagation(); sendCurrentFile() } } catch {}
+      try { s.addEventListener('pointerup', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch {}
+      try { s.addEventListener('touchend', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch {}
+      /* remove overlay-wide click trigger to avoid duplicate sends */
+      try { /* no-op */ } catch {}
       return o })()
     let pendingFile = null
+    let uploading = false
+    let uploadAbort = null
     previewOverlay._currentUrl = ''
     function cancelPreview() {
       try { if (previewOverlay._currentUrl) { URL.revokeObjectURL(previewOverlay._currentUrl); previewOverlay._currentUrl = '' } } catch {}
@@ -132,7 +136,30 @@
       previewOverlay.classList.add('hidden')
       try { photoInput.value = '' } catch {}
     }
+    async function compressImage(file, { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {}) {
+      try {
+        const url = URL.createObjectURL(file)
+        const img = document.createElement('img')
+        const done = new Promise((resolve, reject) => { img.onload = () => resolve(); img.onerror = reject })
+        img.src = url
+        await done
+        URL.revokeObjectURL(url)
+        let w = img.naturalWidth || img.width
+        let h = img.naturalHeight || img.height
+        const ratio = Math.min(1, maxWidth / w, maxHeight / h)
+        w = Math.max(1, Math.round(w * ratio))
+        h = Math.max(1, Math.round(h * ratio))
+        const cvs = document.createElement('canvas')
+        cvs.width = w; cvs.height = h
+        const ctx = cvs.getContext('2d')
+        ctx.drawImage(img, 0, 0, w, h)
+        const blob = await new Promise(resolve => cvs.toBlob(resolve, 'image/jpeg', quality))
+        if (blob) return new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+      } catch {}
+      return file
+    }
     async function sendCurrentFile() {
+      if (uploading) return
       if (!pendingFile) {
         try {
           const src = String(previewOverlay && previewOverlay._img && previewOverlay._img.src || '')
@@ -144,6 +171,8 @@
         if (!pendingFile) return
       }
       const fd = new FormData(); fd.append('file', pendingFile)
+      uploading = true
+      try { if (previewOverlay && previewOverlay._send) previewOverlay._send.disabled = true } catch {}
       if (!currentPhone) {
         let p = (typeof localStorage !== 'undefined' ? (localStorage.getItem('anon_phone') || '') : '') || presetPhone || ''
         if (!p) {
@@ -155,22 +184,59 @@
         try { socket.emit('join', { phone: currentPhone, role: 'customer' }) } catch {}
       }
       await ensureCsrf(); const t = getCookie(CSRF_COOKIE)
-      let ok = false, data = null
+      let ok = false, data = null, status = 0
       try {
-        const res = await fetch('/api/upload', { method: 'POST', body: fd, headers: { [CSRF_HEADER]: t || '' } })
+        uploadAbort = new AbortController()
+        const timer = setTimeout(() => { try { uploadAbort.abort() } catch {} }, 15000)
+        const u1 = '/api/upload' + (token ? (('?token=' + encodeURIComponent(token))) : '')
+        const res = await originalFetch(u1, { method: 'POST', body: fd, headers: { [CSRF_HEADER]: t || '' }, credentials: 'include', signal: uploadAbort.signal })
+        clearTimeout(timer)
+        status = (res && res.status) || 0
         ok = !!(res && res.ok)
         try { data = await res.json() } catch {}
       } catch {}
+      if (!ok) {
+        try {
+          uploadAbort = new AbortController()
+          const timer = setTimeout(() => { try { uploadAbort.abort() } catch {} }, 12000)
+          const abs = (location.origin ? String(location.origin).replace(/\/$/, '') : '') + '/api/upload' + (token ? (('?token=' + encodeURIComponent(token))) : '')
+          const res2 = await originalFetch(abs, { method: 'POST', body: fd, headers: { [CSRF_HEADER]: t || '' }, credentials: 'include', signal: uploadAbort.signal })
+          clearTimeout(timer)
+          status = (res2 && res2.status) || status
+          ok = !!(res2 && res2.ok)
+          try { data = await res2.json() } catch {}
+        } catch {}
+      }
+      if (!ok) {
+        try {
+          const qs = new URLSearchParams(location.search); const base = (qs.get('api') || '').replace(/\/$/, '')
+          if (base) {
+            uploadAbort = new AbortController()
+            const timer = setTimeout(() => { try { uploadAbort.abort() } catch {} }, 12000)
+            const url = base + '/api/upload' + (token ? (('?token=' + encodeURIComponent(token))) : '')
+            const res3 = await originalFetch(url, { method: 'POST', body: fd, headers: { [CSRF_HEADER]: t || '' }, credentials: 'include', signal: uploadAbort.signal })
+            clearTimeout(timer)
+            status = (res3 && res3.status) || status
+            ok = !!(res3 && res3.ok)
+            try { data = await res3.json() } catch {}
+          }
+        } catch {}
+      }
       if (ok && data && data.url) {
         socket.emit('message', { phone: currentPhone, sender: 'customer', content: data.url, type: 'image', reply_to: replyToId })
         replyToId = null; try { replyPreview.classList.add('hidden') } catch {}
         cancelPreview()
       } else {
-        alert('上传太频繁，请稍后再试')
+        const msg = (data && (data.message || data.error)) || ''
+        alert('上传失败' + (status ? ('(' + status + ')') : '') + (msg ? (': ' + String(msg)) : '，请稍后再试'))
       }
+      uploading = false
+      uploadAbort = null
+      try { if (previewOverlay && previewOverlay._send) previewOverlay._send.disabled = false } catch {}
     }
     try { previewOverlay._cancel.addEventListener('click', cancelPreview) } catch {}
     try { previewOverlay._send.addEventListener('click', sendCurrentFile) } catch {}
+    try { previewOverlay._send.addEventListener('mouseup', (e)=>{ e.stopPropagation(); sendCurrentFile() }, { capture:true }) } catch {}
     try { previewOverlay._send.addEventListener('click', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch {}
     try { previewOverlay._send.addEventListener('mousedown', (e) => { e.stopPropagation(); sendCurrentFile() }) } catch {}
     try {
@@ -239,16 +305,17 @@
     }
 
     const isEsLang = langParam === 'es'
-    const labelReply = isEsLang ? 'Responder' : 'Reply'
-    const labelCopy = isEsLang ? 'Copiar' : 'Copy'
-    const labelRecall = isEsLang ? 'Retirar' : 'Recall'
-    const labelUpload = isEsLang ? 'Subir foto' : 'Upload photo'
+    const isEnLang = langParam === 'en'
+    const labelReply = isEsLang ? 'Responder' : (isEnLang ? 'Reply' : '回复')
+    const labelCopy = isEsLang ? 'Copiar' : (isEnLang ? 'Copy' : '复制')
+    const labelRecall = isEsLang ? 'Retirar' : (isEnLang ? 'Recall' : '撤回')
+    const labelUpload = isEsLang ? 'Subir foto' : (isEnLang ? 'Upload photo' : '上传照片')
     const uploadTextEl = document.getElementById('uploadText')
     if (uploadTextEl) uploadTextEl.textContent = labelUpload
     // set preview action texts by lang
     try {
-      previewOverlay._cancel.textContent = isEsLang ? 'Cancelar' : '取消'
-      previewOverlay._send.textContent = isEsLang ? 'Enviar foto' : '发送图片'
+      previewOverlay._cancel.textContent = isEsLang ? 'Cancelar' : (isEnLang ? 'Cancel' : '取消')
+      previewOverlay._send.textContent = isEsLang ? 'Enviar foto' : (isEnLang ? 'Send photo' : '发送图片')
     } catch {}
 
     function renderMessage(m) {
@@ -354,17 +421,18 @@
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.matchMedia('(pointer: coarse)').matches
       messagesEl.addEventListener('scroll', tryEmitSeen)
       window.addEventListener('focus', tryEmitSeen)
-      messageInput.addEventListener('paste', e => {
+      messageInput.addEventListener('paste', async e => {
         const cd = e.clipboardData
         if (!cd) return
         const item = Array.from(cd.items || []).find(x => x.type && x.type.indexOf('image/') === 0)
         const file = item && item.getAsFile ? item.getAsFile() : (cd.files && cd.files[0])
         if (!file) return
-        if (file.size > 5 * 1024 * 1024 || !/^image\//.test(file.type)) return
-        const url = URL.createObjectURL(file)
+        if (!/^image\//.test(file.type)) return
+        const f2 = (file.size > 5 * 1024 * 1024) ? await compressImage(file) : file
+        const url = URL.createObjectURL(f2)
         previewOverlay._currentUrl = url
         previewOverlay._img.src = url
-        pendingFile = file
+        pendingFile = f2
         previewOverlay.classList.remove('hidden')
       })
       function updateComposerHeight() {
@@ -398,12 +466,12 @@
         photoInput.click()
       }
       document.addEventListener('click', () => { emojiMenu.classList.add('hidden'); plusMenu.classList.add('hidden') })
-      photoInput.onchange = () => {
+      photoInput.onchange = async () => {
         const f = photoInput.files[0]
         if (!f) return
-        if (f.size > 5 * 1024 * 1024) { photoInput.value = ''; return }
-        pendingFile = f
-        try { const u = URL.createObjectURL(f); previewOverlay._currentUrl = u; previewOverlay._img.src = u } catch {}
+        const f2 = (f.size > 5 * 1024 * 1024) ? await compressImage(f) : f
+        pendingFile = f2
+        try { const u = URL.createObjectURL(f2); previewOverlay._currentUrl = u; previewOverlay._img.src = u } catch {}
         previewOverlay.classList.remove('hidden')
         plusMenu.classList.add('hidden')
       }

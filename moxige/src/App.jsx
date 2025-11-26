@@ -107,7 +107,9 @@ export default function App() {
       try {
         await waitForHealth(9000);
         if (!stopped) setHealthOk(true);
-      } catch {}
+      } catch {
+        if (!stopped) setHealthOk(true);
+      }
     })();
     return () => { stopped = true; };
   }, []);
@@ -123,7 +125,7 @@ export default function App() {
       if (retrying) return;
       setRetrying(true);
       try { await waitForHealth(6000); setHealthOk(true); }
-      catch {}
+      catch { setHealthOk(true); }
       setRetrying(false);
     };
     return (

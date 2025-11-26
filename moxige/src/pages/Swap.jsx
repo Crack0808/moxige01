@@ -146,10 +146,23 @@ export default function Swap() {
     return "NASDAQ:AAPL";
   });
   
-  // 模拟股票数据
-  const [stockPrice, setStockPrice] = useState(817.20);
-  const [priceChange, setPriceChange] = useState(0.80);
-  const [priceChangePercent, setPriceChangePercent] = useState(0.80);
+  // 初始价格使用本地缓存（若存在）以避免刚进页面显示模拟值
+  const initialDisp = String(tradingViewSymbol || "").replace(/^.*:/, "");
+  const initialCache = (() => {
+    try { return JSON.parse(localStorage.getItem(`price:${initialDisp}`) || "null") || null } catch { return null }
+  })();
+  const [stockPrice, setStockPrice] = useState(() => {
+    const p = Number(initialCache?.price);
+    return Number.isFinite(p) && p > 0 ? p : 817.20;
+  });
+  const [priceChange, setPriceChange] = useState(() => {
+    const v = Number(initialCache?.change);
+    return Number.isFinite(v) ? v : 0.80;
+  });
+  const [priceChangePercent, setPriceChangePercent] = useState(() => {
+    const v = Number(initialCache?.changePct);
+    return Number.isFinite(v) ? v : 0.80;
+  });
 
   // 实时价格（用于顶部红框显示）
   const [livePrice, setLivePrice] = useState(null);

@@ -98,7 +98,7 @@
             url = base + url
           }
           const req = (typeof input === 'string') ? url : new Request(url, input)
-          return originalFetch(req, { ...init, headers })
+          return originalFetch(req, { ...init, headers, credentials: 'include' })
         }
       } catch {}
       return originalFetch(input, init)
@@ -129,8 +129,8 @@
     if (!token && qs.get('tokenbar') === '1') { showTokenBar() }
     socket.on('connect_error', () => {
       try {
-        apiBase = apiBase || 'http://127.0.0.1:3001'
-        wsBase = wsBase || 'http://127.0.0.1:3001'
+        apiBase = apiBase || 'http://127.0.0.1:3000'
+        wsBase = wsBase || 'http://127.0.0.1:3000'
         try { socket.disconnect() } catch {}
         socket = makeSocket()
       } catch {}
@@ -274,6 +274,49 @@
         const txt = document.createElement('div')
         txt.textContent = m.content
         div.appendChild(txt)
+        if (m.sender === 'customer' && (!m.type || m.type === 'text')) {
+          const key = m.content || ''
+          if (!window._translateCache) window._translateCache = {}
+          const cached = window._translateCache[key]
+          const run = async () => {
+            try {
+              const csrf = await ensureCsrf()
+              const body = JSON.stringify({ text: key })
+              let ok = false, j = null
+              try {
+                const r1 = await originalFetch('/api/translate', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...(csrf ? { 'x-csrf-token': csrf } : {}) }, body })
+                ok = !!(r1 && r1.ok); if (ok) j = await r1.json()
+              } catch {}
+              if (!ok && apiBase) {
+                try {
+                  const r2 = await originalFetch(String(apiBase).replace(/\/$/, '') + '/api/translate', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...(csrf ? { 'x-csrf-token': csrf } : {}) }, body })
+                  ok = !!(r2 && r2.ok); if (ok) j = await r2.json()
+                } catch {}
+              }
+              if (!ok) return
+              const t = String(j && j.translated || '').trim()
+              if (!t) return
+              window._translateCache[key] = t
+              const sep = document.createElement('div')
+              sep.textContent = '——'
+              const tr = document.createElement('div')
+              tr.textContent = t
+              div.appendChild(sep)
+              div.appendChild(tr)
+              forceScrollBottom()
+            } catch {}
+          }
+          if (cached) {
+            const sep = document.createElement('div')
+            sep.textContent = '——'
+            const tr = document.createElement('div')
+            tr.textContent = cached
+            div.appendChild(sep)
+            div.appendChild(tr)
+          } else {
+            run()
+          }
+        }
       }
       messagesEl.appendChild(div)
       if (autoScroll || m.sender === 'agent') {
@@ -430,6 +473,20 @@
       const content = messageInput.value.trim()
       if (!content) return
       socket.emit('message', { phone: currentPhone, sender: 'agent', content, reply_to: replyToId })
+      const mlocal = { id: 'local-' + Date.now(), phone: currentPhone, sender: 'agent', content, ts: Date.now(), type: null, reply_to: replyToId || null }
+      const div = document.createElement('div')
+      div.className = 'msg me'
+      div.dataset.id = mlocal.id
+      div.dataset.local = '1'
+      const txt = document.createElement('div')
+      txt.textContent = content
+      div.appendChild(txt)
+      messagesEl.appendChild(div)
+      msgs.push(mlocal)
+      const i = conversations.findIndex(x => x.phone === currentPhone)
+      if (i >= 0) { const now = mlocal.ts; conversations[i].last_agent_ts = now; conversations[i].last_content = content; conversations[i].last_ts = now; renderList(conversations) }
+      lastAgentTs = mlocal.ts
+      setReadStatus(false)
       messageInput.value = ''
       updateComposerHeight()
       replyToId = null
@@ -511,6 +568,21 @@
       const r = await fetch('/api/upload', { method: 'POST', headers: csrf ? { 'x-csrf-token': csrf } : {}, body: fd }).then(r => r.json()).catch(() => null)
       if (r && r.url) {
         socket.emit('message', { phone: currentPhone, sender: 'agent', content: r.url, type: 'image', reply_to: replyToId })
+        const mlocal = { id: 'local-' + Date.now(), phone: currentPhone, sender: 'agent', content: r.url, ts: Date.now(), type: 'image', reply_to: replyToId || null }
+        const div = document.createElement('div')
+        div.className = 'msg me'
+        div.dataset.id = mlocal.id
+        div.dataset.local = '1'
+        const img = document.createElement('img')
+        img.src = r.url
+        img.className = 'msg-image'
+        div.appendChild(img)
+        messagesEl.appendChild(div)
+        msgs.push(mlocal)
+        const i = conversations.findIndex(x => x.phone === currentPhone)
+        if (i >= 0) { const now = mlocal.ts; conversations[i].last_agent_ts = now; conversations[i].last_content = '图片'; conversations[i].last_ts = now; renderList(conversations) }
+        lastAgentTs = mlocal.ts
+        setReadStatus(false)
       }
       photoInput.value = ''
       plusMenu.classList.add('hidden')
@@ -519,6 +591,13 @@
     }
 
     socket.on('message', m => {
+      if (currentPhone && m.phone === currentPhone && m.sender === 'agent') {
+        const lastLocal = messagesEl.querySelector('.msg.me[data-local="1"]')
+        if (lastLocal) {
+          const li = lastLocal.querySelector('.msg-image')
+          if ((m.type === 'image' && li && li.src === m.content) || (m.type !== 'image' && lastLocal.textContent === m.content)) { try { lastLocal.remove() } catch {} }
+        }
+      }
       renderMessage(m)
       if (!currentPhone || m.phone !== currentPhone) {
         const i = conversations.findIndex(x => x.phone === m.phone)

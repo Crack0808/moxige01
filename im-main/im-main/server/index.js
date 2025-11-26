@@ -32,20 +32,21 @@ const CSRF_COOKIE_NAME = String(process.env.IM_CSRF_COOKIE_NAME || 'csrf_token')
 const CSRF_HEADER_NAME = String(process.env.IM_CSRF_HEADER_NAME || 'x-csrf-token')
 function parseCookie(h) { const out = {}; try { String(h||'').split(';').forEach(p=>{ const i=p.indexOf('='); if(i>0){ const k=p.slice(0,i).trim(); const v=p.slice(i+1).trim(); out[k]=v; } }); } catch {} ; return out }
 function setCsrfCookieIfMissing(req, res, next) { try { const c = parseCookie(req.headers && req.headers.cookie)[CSRF_COOKIE_NAME]; if (!c) { const t = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2); const isProd = String(process.env.NODE_ENV||'').trim().toLowerCase()==='production'; const opts = { httpOnly: false, sameSite: isProd ? 'None' : 'Lax', secure: isProd, path: '/' }; res.cookie(CSRF_COOKIE_NAME, t, opts); } } catch {} ; next() }
-function csrfGuard(req, res, next) {
+function csrfGuard(req, res) {
   try {
     const m = String(req.method||'GET').toUpperCase();
-    if (!['POST','PUT','PATCH','DELETE'].includes(m)) return next();
+    if (!['POST','PUT','PATCH','DELETE'].includes(m)) return true;
     const cookies = parseCookie(req.headers && req.headers.cookie);
     const c = String(cookies[CSRF_COOKIE_NAME]||'').trim();
     const h = String(req.headers[CSRF_HEADER_NAME]||'').trim();
     const devBypass = String(process.env.NODE_ENV||'').trim().toLowerCase() !== 'production';
     if (!c || !h || c !== h) {
-      if (devBypass) return next();
-      return res.status(403).json({ error: 'csrf_invalid' });
+      if (devBypass) return true;
+      try { res.status(403).json({ error: 'csrf_invalid' }) } catch {}
+      return false;
     }
-    return next();
-  } catch (_) { return res.status(403).json({ error: 'csrf_invalid' }) }
+    return true;
+  } catch (_) { try { res.status(403).json({ error: 'csrf_invalid' }) } catch {} ; return false }
 }
 app.use(setCsrfCookieIfMissing)
 function securityHeaders(req, res, next) {
@@ -324,7 +325,7 @@ app.get('/api/me/kyc/status', (req, res) => {
 })
 
 app.post('/api/me/kyc/submit', (req, res) => {
-  if (!csrfGuard(req, res, () => {})) return
+  if (!csrfGuard(req, res)) return
   try {
     const fields = (req.body && req.body.fields) || {}
     const photos = (req.body && req.body.photos) || []
@@ -435,7 +436,7 @@ app.get('/api/notes/:phone', (req, res) => {
 })
 
 app.post('/api/notes', rateLimitWrite, (req, res) => {
-  if (!csrfGuard(req, res, () => {})) return
+  if (!csrfGuard(req, res)) return
   const { phone, content } = req.body || {}
   if (!phone || !content) return res.status(400).json({ error: 'bad_request' })
   const ts = Date.now()
@@ -447,7 +448,7 @@ app.post('/api/notes', rateLimitWrite, (req, res) => {
 })
 
 app.patch('/api/notes/:id', rateLimitWrite, (req, res) => {
-  if (!csrfGuard(req, res, () => {})) return
+  if (!csrfGuard(req, res)) return
   const id = req.params.id
   const { content } = req.body || {}
   if (!id || typeof content !== 'string') return res.status(400).json({ error: 'bad_request' })
@@ -459,7 +460,7 @@ app.patch('/api/notes/:id', rateLimitWrite, (req, res) => {
 })
 
 app.post('/api/notes/:id/pin', rateLimitWrite, (req, res) => {
-  if (!csrfGuard(req, res, () => {})) return
+  if (!csrfGuard(req, res)) return
   const id = req.params.id
   const { pinned } = req.body || {}
   const val = pinned ? 1 : 0
@@ -471,7 +472,7 @@ app.post('/api/notes/:id/pin', rateLimitWrite, (req, res) => {
 })
 
 app.delete('/api/notes/:id', rateLimitWrite, (req, res) => {
-  if (!csrfGuard(req, res, () => {})) return
+  if (!csrfGuard(req, res)) return
   const id = req.params.id
   if (!id) return res.status(400).json({ error: 'bad_request' })
   if (!db) { mem.notes = mem.notes.filter(n => String(n.id) !== String(id)); return res.json({ ok: true }) }
@@ -629,8 +630,34 @@ app.get('/api/health', (req, res) => {
 app.get('/api/version', (req, res) => {
   res.json({ ok: true, name: 'im-main', version: '0.1.0', port: Number(port) })
 })
+function translateDeepL(text) {
+  return new Promise((resolve) => {
+    try {
+      const key = String(process.env.DEEPL_AUTH_KEY || '').trim()
+      if (!key) return resolve({ ok: false })
+      const host = /:fx$/i.test(key) ? 'api-free.deepl.com' : 'api.deepl.com'
+      const payload = 'text=' + encodeURIComponent(text) + '&target_lang=ZH'
+      const https = require('https')
+      const opt = { method: 'POST', hostname: host, port: 443, path: '/v2/translate', headers: { 'Authorization': 'DeepL-Auth-Key ' + key, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(payload) } }
+      const rq = https.request(opt, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'{}'); const t = o && o.translations && o.translations[0] && o.translations[0].text || ''; const dlang = o && o.translations && o.translations[0] && o.translations[0].detected_source_language || ''; resolve({ ok: true, text: t, detected: dlang }) } catch { resolve({ ok: false }) } }) })
+      rq.setTimeout(6000, () => { try { rq.destroy(new Error('timeout')) } catch {} ; resolve({ ok: false }) })
+      rq.on('error', () => resolve({ ok: false }))
+      rq.write(payload); rq.end()
+    } catch { resolve({ ok: false }) }
+  })
+}
+app.post('/api/translate', rateLimitWrite, async (req, res) => {
+  if (!csrfGuard(req, res)) return
+  try {
+    const text = String((req.body && req.body.text) || '').trim()
+    if (!text) return res.status(400).json({ error: 'bad_request' })
+    const r = await translateDeepL(text)
+    if (!r || !r.ok) return res.status(502).json({ error: 'translate_failed' })
+    res.json({ ok: true, translated: r.text || '', detected_lang: r.detected || '' })
+  } catch (_) { return res.status(500).json({ error: 'server_error' }) }
+})
 app.post('/api/upload', rateLimitUpload, upload.single('file'), (req, res) => {
-  if (!csrfGuard(req, res, () => {})) return
+  if (!csrfGuard(req, res)) return
   if (!req.file) return res.status(400).json({ error: 'no_file' })
   const src = path.join(pendingDir, req.file.filename)
   const dst = path.join(uploadDir, req.file.filename)
@@ -646,8 +673,12 @@ app.post('/api/upload', rateLimitUpload, upload.single('file'), (req, res) => {
       const http = scanUrl.startsWith('https') ? require('https') : require('http')
       const u = new URL(scanUrl)
       const opt = { method:'POST', hostname:u.hostname, port:u.port|| (u.protocol==='https:'?443:80), path:u.pathname+u.search, headers:{ 'Content-Type':'application/json', 'Content-Length': Buffer.byteLength(payload) } }
-      const rq = http.request(opt, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const obj = JSON.parse(data||'{}'); if (obj && (obj.flagged || obj.ok===false)) { try { fs.unlinkSync(src) } catch {}; return res.status(400).json({ error:'file_flagged' }) } } catch {} ; try { fs.renameSync(src, dst) } catch {} ; return res.json({ url }) }) })
-      rq.on('error', ()=> res.json({ url }))
+      let responded = false
+      const done = (fn) => { if (!responded) { responded = true; try { fn() } catch {} } }
+      const rq = http.request(opt, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const obj = JSON.parse(data||'{}'); if (obj && (obj.flagged || obj.ok===false)) { try { fs.unlinkSync(src) } catch {} ; return done(()=>res.status(400).json({ error:'file_flagged' })) } } catch {} ; try { fs.renameSync(src, dst) } catch {} ; return done(()=>res.json({ url })) }) })
+      rq.on('timeout', () => { try { rq.destroy(new Error('timeout')) } catch {} ; try { fs.renameSync(src, dst) } catch {} ; done(()=>res.json({ url })) })
+      rq.setTimeout(8000)
+      rq.on('error', () => { try { fs.renameSync(src, dst) } catch {} ; done(()=>res.json({ url })) })
       rq.write(payload); rq.end();
       return
     }
