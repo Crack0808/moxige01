@@ -63,6 +63,16 @@ function securityHeaders(req, res, next) {
   next()
 }
 app.use(securityHeaders)
+app.use((req, res, next) => {
+  try {
+    if (String(req.method||'GET').toUpperCase() === 'GET') {
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('Pragma', 'no-cache')
+      res.setHeader('Expires', '0')
+    }
+  } catch (_) {}
+  next()
+})
 const rateBuckets = new Map()
 function createRateLimiter(opts) {
   const windowMs = Math.max(1000, Number((opts && opts.windowMs) || 60000))
@@ -174,6 +184,24 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir)
 const dbPath = path.join(dataDir, 'chat.db')
 const db = sqlite3 ? new sqlite3.Database(dbPath) : null
 const mem = { users: new Map(), messages: [], notes: [], user_notes: new Map(), kyc: [], kyc_status: new Map(), seen: new Map(), reads: new Map(), agent_acl: new Set(), agent_tokens: [], nextId: 1 }
+const memPath = path.join(dataDir, 'mem.json')
+try {
+  if (fs.existsSync(memPath)) {
+    const raw = fs.readFileSync(memPath, 'utf8')
+    const obj = JSON.parse(raw || '{}')
+    if (Array.isArray(obj.messages)) mem.messages = obj.messages.map(m => ({ id: m.id, phone: m.phone, sender: m.sender, content: m.content, ts: m.ts, type: m.type || null, reply_to: m.reply_to || null }))
+    if (obj && obj.users && typeof obj.users === 'object') { mem.users = new Map(Object.entries(obj.users).map(([k,v])=>[k,{ phone:String(k), name:String(v && v.name || ''), avatar:String(v && v.avatar || ''), country:String(v && v.country || '') }])) }
+    if (Number.isFinite(obj.nextId)) mem.nextId = obj.nextId
+  }
+} catch (_) {}
+function saveMem() {
+  try {
+    const usersObj = {}
+    for (const [k,v] of mem.users.entries()) usersObj[k] = { name: v.name || '', avatar: v.avatar || '', country: v.country || '' }
+    const out = { messages: mem.messages.slice(0), users: usersObj, nextId: mem.nextId }
+    fs.writeFileSync(memPath, JSON.stringify(out))
+  } catch (_) {}
+}
 
 if (db) {
   db.serialize(() => {
@@ -216,6 +244,12 @@ if (db) {
 }
 
 app.use(express.static(path.join(__dirname, '..', 'public')))
+app.get('/logo.png', (req, res) => {
+  try { res.sendFile(path.join(__dirname, '..', 'public', 'tiny.png')) } catch { res.status(204).end() }
+})
+app.get('/favicon.ico', (req, res) => {
+  try { res.sendFile(path.join(__dirname, '..', 'public', 'tiny.png')) } catch { res.status(204).end() }
+})
 
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads')
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir)
@@ -244,31 +278,38 @@ app.get('/api/user/:phone', async (req, res) => {
     const row = mem.users.get(phone)
     if (row) return res.json(row)
     const profile = await fetchUserProfile(phone)
-    if (profile) { mem.users.set(phone, profile); return res.json(profile) }
+    if (profile) { mem.users.set(phone, profile); saveMem(); return res.json(profile) }
     return res.status(404).json({ error: 'not_found' })
   }
+  function sanitizeCountry(v){ try { const s = String(v||'').trim(); if (!s || /undefined/i.test(s)) return ''; return s } catch { return '' } }
   db.get('SELECT phone, name, avatar, country FROM users WHERE phone = ?', [phone], async (err, row) => {
     if (err) return res.status(500).json({ error: 'db_error' })
     if (row) {
+      row.country = sanitizeCountry(row.country)
+      if (!row.avatar) {
+        const ext = await fetchUserProfile(phone).catch(()=>null)
+        if (ext && (ext.avatar || ext.name || ext.country)) {
+          upsertUserProfile(db, ext)
+          return res.json({ phone, name: ext.name || row.name || '', avatar: ext.avatar || '', country: sanitizeCountry(ext.country || row.country || '') })
+        }
+      }
       if (!row.country) {
         db.get('SELECT country, ip FROM messages WHERE phone = ? AND sender = ? ORDER BY ts DESC LIMIT 1', [phone, 'customer'], async (e2, last) => {
           if (!e2 && last && (last.country || last.ip)) {
             const c = last.country || await resolveCountry(last.ip)
-            if (c) db.run('UPDATE users SET country = ? WHERE phone = ?', [c, phone])
-            return res.json({ ...row, country: c || row.country || '' })
+            const sc = sanitizeCountry(c)
+            if (sc) db.run('UPDATE users SET country = ? WHERE phone = ?', [sc, phone])
+            return res.json({ ...row, country: sc || row.country || '' })
           }
-          return res.json(row)
+          return res.json({ ...row, country: sanitizeCountry(row.country) })
         })
       } else {
-        return res.json(row)
+        return res.json({ ...row, country: sanitizeCountry(row.country) })
       }
       return
     }
     const profile = await fetchUserProfile(phone)
-    if (profile) {
-      upsertUserProfile(db, profile)
-      return res.json(profile)
-    }
+    if (profile) { upsertUserProfile(db, profile); return res.json(profile) }
     res.status(404).json({ error: 'not_found' })
   })
 })
@@ -279,11 +320,11 @@ app.post('/api/user', async (req, res) => {
   try {
     const ip = (req.headers['x-forwarded-for'] || '').toString().split(',')[0].trim() || req.ip || ''
     const country = await resolveCountry(ip)
-    if (!db) { mem.users.set(phone, { phone, name: name || '', avatar: avatar || '', country }); return res.json({ ok: true }) }
+    if (!db) { mem.users.set(phone, { phone, name: name || '', avatar: avatar || '', country }); saveMem(); return res.json({ ok: true }) }
     upsertUserProfile(db, { phone, name: name || '', avatar: avatar || '', country })
     res.json({ ok: true })
   } catch (_) {
-    if (!db) { mem.users.set(phone, { phone, name: name || '', avatar: avatar || '' }); return res.json({ ok: true }) }
+    if (!db) { mem.users.set(phone, { phone, name: name || '', avatar: avatar || '' }); saveMem(); return res.json({ ok: true }) }
     upsertUserProfile(db, { phone, name: name || '', avatar: avatar || '' })
     res.json({ ok: true })
   }
@@ -542,7 +583,7 @@ io.on('connection', socket => {
     p.then(country => {
       if (!db) {
         const m = { id: mem.nextId++, phone, sender: sender || 'customer', content, ts, type: type || null, reply_to: reply_to || null, ip: isCustomer ? ip : null, country: isCustomer ? (country || null) : null }
-        mem.messages.push(m)
+        mem.messages.push(m); saveMem()
         const payload = { id: m.id, phone, sender: m.sender, content, ts, type: m.type, reply_to: m.reply_to }
         io.to(phone).emit('message', payload)
         return
@@ -566,6 +607,7 @@ io.on('connection', socket => {
       const row = mem.messages[idx]
       if (by === 'customer') { mem.messages[idx] = { ...row, type: 'recall' }; io.to(phone).emit('recalled', { phone, id, by: 'customer', content: row.content }) }
       else { mem.messages.splice(idx,1); io.to(phone).emit('recalled', { phone, id, by: 'agent' }) }
+      saveMem()
       return
     }
     db.get('SELECT id, content FROM messages WHERE id = ? AND phone = ?', [id, phone], (err, row) => {
@@ -639,19 +681,46 @@ function translateDeepL(text) {
       const payload = 'text=' + encodeURIComponent(text) + '&target_lang=ZH'
       const https = require('https')
       const opt = { method: 'POST', hostname: host, port: 443, path: '/v2/translate', headers: { 'Authorization': 'DeepL-Auth-Key ' + key, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(payload) } }
-      const rq = https.request(opt, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'{}'); const t = o && o.translations && o.translations[0] && o.translations[0].text || ''; const dlang = o && o.translations && o.translations[0] && o.translations[0].detected_source_language || ''; resolve({ ok: true, text: t, detected: dlang }) } catch { resolve({ ok: false }) } }) })
+      const rq = https.request(opt, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'{}'); const t = o && o.translations && o.translations[0] && o.translations[0].text || ''; const dlang = o && o.translations && o.translations[0] && o.translations[0].detected_source_language || ''; resolve({ ok: !!t, text: t, detected: dlang }) } catch { resolve({ ok: false }) } }) })
       rq.setTimeout(6000, () => { try { rq.destroy(new Error('timeout')) } catch {} ; resolve({ ok: false }) })
       rq.on('error', () => resolve({ ok: false }))
       rq.write(payload); rq.end()
     } catch { resolve({ ok: false }) }
   })
 }
+function translateMyMemory(text) {
+  return new Promise((resolve) => {
+    try {
+      const https = require('https')
+      const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=en%7Czh-CN'
+      https.get(url, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'{}'); const t = o && o.responseData && o.responseData.translatedText || ''; const dlang = o && o.responseData && o.responseData.detectedSourceLanguage || ''; resolve({ ok: !!t, text: t, detected: dlang || '' }) } catch { resolve({ ok: false }) } }) }).on('error', () => resolve({ ok: false }))
+    } catch { resolve({ ok: false }) }
+  })
+}
+function translateGoogle(text) {
+  return new Promise((resolve) => {
+    try {
+      const https = require('https')
+      const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=' + encodeURIComponent(text)
+      https.get(url, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'[]'); const t = o && o[0] && o[0][0] && o[0][0][0] || ''; const dlang = o && o[2] || ''; resolve({ ok: !!t, text: t, detected: dlang || '' }) } catch { resolve({ ok: false }) } }) }).on('error', () => resolve({ ok: false }))
+    } catch { resolve({ ok: false }) }
+  })
+}
+async function translateSmart(text) {
+  const r1 = await translateDeepL(text)
+  if (r1 && r1.ok) return r1
+  const r2 = await translateMyMemory(text)
+  if (r2 && r2.ok) return r2
+  const r3 = await translateGoogle(text)
+  if (r3 && r3.ok) return r3
+  return { ok: false }
+}
 app.post('/api/translate', rateLimitWrite, async (req, res) => {
   if (!csrfGuard(req, res)) return
   try {
     const text = String((req.body && req.body.text) || '').trim()
     if (!text) return res.status(400).json({ error: 'bad_request' })
-    const r = await translateDeepL(text)
+    const r = await translateSmart(text)
     if (!r || !r.ok) return res.status(502).json({ error: 'translate_failed' })
     res.json({ ok: true, translated: r.text || '', detected_lang: r.detected || '' })
   } catch (_) { return res.status(500).json({ error: 'server_error' }) }
@@ -710,7 +779,8 @@ scheduleUploadCleanup()
 
 function resolveCountry(ip) {
   return new Promise((resolve) => {
-    if (!ip || ip === '::1' || ip === '127.0.0.1') return resolve('本地')
+    if (ip === '::1' || ip === '127.0.0.1') return resolve('本地')
+    if (!ip) return resolve('未知')
     try {
       const https = require('https')
       const url = `https://ipapi.co/${encodeURIComponent(ip)}/country_name/`
@@ -719,7 +789,8 @@ function resolveCountry(ip) {
         r.on('data', chunk => { data += chunk })
         r.on('end', () => {
           const t = (data || '').trim()
-          resolve(t || null)
+          const sc = (/undefined/i.test(t)) ? null : (t || null)
+          resolve(sc)
         })
       }).on('error', () => resolve(null))
     } catch (_) {

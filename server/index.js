@@ -117,6 +117,7 @@ function runMigrations() {
     addCol('otp_secret', 'TEXT');
     addCol('referral_code', 'TEXT');
     addCol('invited_by_user_id', 'INTEGER');
+    addCol('credit_score', 'INTEGER');
   } catch {}
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS withdraw_orders (
@@ -954,7 +955,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/version', (req, res) => {
   let connected = false;
   try { db.prepare('SELECT 1').get(); connected = true; } catch {}
-  res.json({ ok: true, name: 'mxg-backend', version: '1.0.0', port: PORT, db: { path: resolvedDbPath, connected } });
+  res.json({ ok: true, name: 'mxg-backend', version: '1.0.1', port: PORT, db: { path: resolvedDbPath, connected } });
 });
 
 app.get('/api/me', requireAuth, (req, res) => {
@@ -1152,7 +1153,17 @@ app.get('/api/dev/seed', (req, res) => {
     try { db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hashPassword('yisen01'), now, Number(operator.id)); } catch {}
     try {
       const cur = db.prepare('SELECT invite_code FROM users WHERE id = ?').get(Number(operator.id))?.invite_code || '';
-      if (!cur) db.prepare('UPDATE users SET invite_code=?, updated_at=? WHERE id=?').run('RTXDR3W4', now, Number(operator.id));
+      if (!cur) {
+        let code = '';
+        let tries = 0;
+        do {
+          code = String(Math.floor(100000 + Math.random() * 900000));
+          const exists = db.prepare('SELECT id FROM users WHERE invite_code = ?').get(code);
+          if (!exists) break;
+          tries++;
+        } while (tries < 5);
+        db.prepare('UPDATE users SET invite_code=?, updated_at=? WHERE id=?').run(code, now, Number(operator.id));
+      }
     } catch {}
     let user = db.prepare("SELECT id, phone FROM users WHERE phone = ? AND role = 'customer'").get('1111111111');
     if (!user) {
@@ -1317,6 +1328,7 @@ app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, re
   try {
     const q = String(req.query.q || '').trim();
     const assigned = String(req.query.assigned || 'all').toLowerCase();
+    const includeBalances = String(req.query.includeBalances || '1') !== '0';
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize || 20)));
     const offset = (page - 1) * pageSize;
@@ -1344,25 +1356,61 @@ app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, re
     }
     let rows;
     if (q) {
-      const exactSql = "SELECT id, phone, name, role, last_login_ip, last_login_country AS country, assigned_admin_id, assigned_operator_id FROM users WHERE phone = ? AND role NOT IN ('admin','operator','super')" + assignedCond + extraCond + " ORDER BY id ASC LIMIT ? OFFSET ?";
+      const exactSql = "SELECT id, phone, name, role, last_login_ip, last_login_country AS country, assigned_admin_id, assigned_operator_id, credit_score FROM users WHERE phone = ? AND role NOT IN ('admin','operator','super')" + assignedCond + extraCond + " ORDER BY id ASC LIMIT ? OFFSET ?";
       rows = db.prepare(exactSql).all(q, ...extraParams, pageSize, offset);
       const cntExact = db.prepare("SELECT COUNT(1) AS c FROM users WHERE phone = ? AND role NOT IN ('admin','operator','super')" + assignedCond + extraCond).get(q, ...extraParams)?.c || 0;
       if (rows && rows.length > 0) {
-        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null }));
+        let balMap = new Map();
+        if (includeBalances) {
+          const ids = rows.map(r => Number(r.id));
+          if (ids.length > 0) {
+            const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(()=>'?').join(',')})`).all(...ids);
+            for (const r of balRows) {
+              const m = balMap.get(r.user_id) || { MXN: 0, USD: 0, USDT: 0 };
+              m[String(r.currency||'').toUpperCase()] = Number(r.amount||0);
+              balMap.set(r.user_id, m);
+            }
+          }
+        }
+        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN:0, USD:0, USDT:0 }) : undefined }));
         return res.json({ ok: true, users, total: cntExact });
       } else {
         const like = `%${q}%`;
-        const sql = "SELECT id, phone, name, role, last_login_ip, last_login_country AS country, assigned_admin_id, assigned_operator_id FROM users WHERE name LIKE ? AND role NOT IN ('admin','operator','super')" + assignedCond + extraCond + " ORDER BY id ASC LIMIT ? OFFSET ?";
+        const sql = "SELECT id, phone, name, role, last_login_ip, last_login_country AS country, assigned_admin_id, assigned_operator_id, credit_score FROM users WHERE name LIKE ? AND role NOT IN ('admin','operator','super')" + assignedCond + extraCond + " ORDER BY id ASC LIMIT ? OFFSET ?";
         rows = db.prepare(sql).all(like, ...extraParams, pageSize, offset);
         const c = db.prepare("SELECT COUNT(1) AS c FROM users WHERE name LIKE ? AND role NOT IN ('admin','operator','super')" + assignedCond + extraCond).get(like, ...extraParams)?.c || 0;
-        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null }));
+        let balMap = new Map();
+        if (includeBalances) {
+          const ids = rows.map(r => Number(r.id));
+          if (ids.length > 0) {
+            const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(()=>'?').join(',')})`).all(...ids);
+            for (const r of balRows) {
+              const m = balMap.get(r.user_id) || { MXN: 0, USD: 0, USDT: 0 };
+              m[String(r.currency||'').toUpperCase()] = Number(r.amount||0);
+              balMap.set(r.user_id, m);
+            }
+          }
+        }
+        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN:0, USD:0, USDT:0 }) : undefined }));
         return res.json({ ok: true, users, total: c });
       }
     } else {
-      const sql = "SELECT id, phone, name, role, last_login_ip, last_login_country AS country, assigned_admin_id, assigned_operator_id FROM users WHERE role NOT IN ('admin','operator','super')" + assignedCond + extraCond + " ORDER BY id ASC LIMIT ? OFFSET ?";
+      const sql = "SELECT id, phone, name, role, last_login_ip, last_login_country AS country, assigned_admin_id, assigned_operator_id, credit_score FROM users WHERE role NOT IN ('admin','operator','super')" + assignedCond + extraCond + " ORDER BY id ASC LIMIT ? OFFSET ?";
       rows = db.prepare(sql).all(...extraParams, pageSize, offset);
       const c = db.prepare("SELECT COUNT(1) AS c FROM users WHERE role NOT IN ('admin','operator','super')" + assignedCond + extraCond).get(...extraParams)?.c || 0;
-      const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null }));
+      let balMap = new Map();
+      if (includeBalances) {
+        const ids = rows.map(r => Number(r.id));
+        if (ids.length > 0) {
+          const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(()=>'?').join(',')})`).all(...ids);
+          for (const r of balRows) {
+            const m = balMap.get(r.user_id) || { MXN: 0, USD: 0, USDT: 0 };
+            m[String(r.currency||'').toUpperCase()] = Number(r.amount||0);
+            balMap.set(r.user_id, m);
+          }
+        }
+      }
+      const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, credit_score: Number.isFinite(Number(u.credit_score)) ? Number(u.credit_score) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN:0, USD:0, USDT:0 }) : undefined }));
       return res.json({ ok: true, users, total: c });
     }
   } catch (e) {
@@ -2137,7 +2185,7 @@ app.get('/version', (req, res) => {
       const m = f.match(/\.([a-f0-9]{8,})\./i);
       return { file: f, hash: m ? m[1] : '' };
     });
-    const api = { name: 'mxg-backend', version: '1.0' };
+    const api = { name: 'mxg-backend', version: '1.0.1' };
     const buildInfoPath = path.join(guessDist() || '', 'build-info.json');
     let build = { buildTime: '' };
     try { build = JSON.parse(fs.readFileSync(buildInfoPath, 'utf8')); } catch {}
@@ -2145,7 +2193,7 @@ app.get('/version', (req, res) => {
     const origin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['host'] || ''}`;
     res.json({ api, frontendAssets, build, ts, origin });
   } catch (e) {
-    res.json({ api: { name: 'mxg-backend', version: '1.0' }, frontendAssets: [], build: {}, ts: new Date().toISOString() });
+    res.json({ api: { name: 'mxg-backend', version: '1.0.1' }, frontendAssets: [], build: {}, ts: new Date().toISOString() });
   }
 });
 
@@ -3823,10 +3871,8 @@ app.get('/api/me/invite/code', requireAuth, (req, res) => {
 
 // ---- Staff: invitation code (self)
 function generateInviteCode() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 8; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return code;
+  const n = Math.floor(100000 + Math.random() * 900000);
+  return String(n);
 }
 app.get('/api/admin/staffs/me/invite_code', requireRoles(['operator']), (req, res) => {
   try {
@@ -4204,33 +4250,12 @@ function getBalances(uid) {
 function updateBalance(uid, currency, delta) {
   const now = new Date().toISOString();
   const c = String(currency || '').toUpperCase();
-  // 尝试行式更新
-  try {
-    const exist = db.prepare('SELECT id FROM balances WHERE user_id = ? AND UPPER(currency) = ?').get(uid, c);
-    const curMap = getBalances(uid);
-    const curVal = c === 'USD' ? curMap.usd : (c === 'MXN' ? curMap.mxn : curMap.usdt);
-    const next = Number(curVal) + Number(delta);
-    if (exist && exist.id != null) {
-      db.prepare('UPDATE balances SET amount = ?, updated_at = ? WHERE id = ?').run(next, now, Number(exist.id));
-    } else {
-      db.prepare('INSERT INTO balances (user_id, currency, amount, updated_at) VALUES (?, ?, ?, ?)').run(uid, c, next, now);
-    }
-    return;
-  } catch {}
-  // 回退列式更新
-  if (c === 'USD') {
-    const cur = getBalances(uid).usd + delta;
-    db.prepare('INSERT INTO balances (user_id, usd, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET usd = ?, updated_at = ?')
-      .run(uid, cur, now, cur, now);
-  } else if (c === 'MXN') {
-    const cur = getBalances(uid).mxn + delta;
-    db.prepare('INSERT INTO balances (user_id, mxn, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET mxn = ?, updated_at = ?')
-      .run(uid, cur, now, cur, now);
-  } else if (c === 'USDT') {
-    const cur = getBalances(uid).usdt + delta;
-    db.prepare('INSERT INTO balances (user_id, usdt, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET usdt = ?, updated_at = ?')
-      .run(uid, cur, now, cur, now);
-  }
+  const curMap = getBalances(uid);
+  const curVal = c === 'USD' ? curMap.usd : (c === 'MXN' ? curMap.mxn : curMap.usdt);
+  const next = Number(curVal) + Number(delta || 0);
+  db.prepare(`INSERT INTO balances (user_id, currency, amount, updated_at) VALUES (?, ?, ?, ?)
+              ON CONFLICT(user_id, currency) DO UPDATE SET amount=excluded.amount, updated_at=excluded.updated_at`)
+    .run(uid, c, next, now);
 }
 app.post('/api/me/withdraw/create', requireAuth, (req, res) => {
   try {
@@ -4426,9 +4451,7 @@ app.get('/api/admin/invite/commissions', requireRoles(['super','admin']), (req, 
 });
 
 // Final 404 handler (must be registered last)
-app.use((req, res) => {
-  res.status(404).json({ ok: false, error: 'Not Found' });
-});
+// moved to the end of file
 
 // ---- Public: user profile lookup by phone (limited fields) ----
 app.get('/api/public/user_profile', (req, res) => {
@@ -4443,4 +4466,40 @@ app.get('/api/public/user_profile', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
+});
+// ---- Me: Credit score ----
+app.get('/api/me/credit/score', requireAuth, (req, res) => {
+  try {
+    const row = db.prepare('SELECT credit_score FROM users WHERE id = ?').get(Number(req.user.id));
+    const s = Number(row?.credit_score ?? 100);
+    const score = Number.isFinite(s) ? s : 100;
+    res.json({ ok: true, score });
+  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+});
+
+// ---- Admin: set user credit score ----
+app.post('/api/admin/users/:uid/credit_score', requireRoles(['super','admin','operator']), (req, res) => {
+  try {
+    const uid = Number(req.params.uid);
+    const raw = Number(req.body?.score);
+    if (!Number.isFinite(uid)) return res.status(400).json({ ok:false, error:'bad uid' });
+    if (!Number.isFinite(raw)) return res.status(400).json({ ok:false, error:'bad score' });
+    const score = Math.max(0, Math.min(1000, Math.round(raw)));
+    if (String(req.user.role) === 'operator' && !operatorCanManageCustomer(req, uid)) {
+      return res.status(403).json({ ok:false, error:'Forbidden' });
+    }
+    const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(uid);
+    if (!exists) return res.status(404).json({ ok:false, error:'user not found' });
+    db.prepare('UPDATE users SET credit_score=?, updated_at=? WHERE id=?').run(score, new Date().toISOString(), uid);
+    try { db.exec('CREATE TABLE IF NOT EXISTS credit_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, admin_id INTEGER, role TEXT, score INTEGER, created_at TEXT)'); } catch {}
+    try { db.prepare('INSERT INTO credit_audit (user_id, admin_id, role, score, created_at) VALUES (?, ?, ?, ?, ?)').run(uid, Number(req.user.id), String(req.user.role||''), score, new Date().toISOString()); } catch {}
+    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
+      .run(uid, '信用分更新', `你当前的机构信用分已更新为：${score}`, new Date().toISOString()); } catch {}
+    res.json({ ok:true, score });
+  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+});
+
+// Final 404 handler (must be registered last)
+app.use((req, res) => {
+  res.status(404).json({ ok: false, error: 'Not Found' });
 });

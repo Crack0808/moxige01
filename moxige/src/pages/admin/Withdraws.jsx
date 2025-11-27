@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { adminWithdrawList, adminWithdrawApprove, adminWithdrawComplete, adminWithdrawReject, api } from '../../services/api'
+import { adminWithdrawList, adminWithdrawApprove, adminWithdrawComplete, adminWithdrawReject, api, notificationsApi } from '../../services/api'
 
 export default function AdminWithdraws({ embedded = false }) {
   const [phone, setPhone] = useState('')
@@ -41,7 +41,22 @@ export default function AdminWithdraws({ embedded = false }) {
   useEffect(() => { setPage(1) }, [currency, status, startDate, endDate, phone])
 
   async function approve(id) { try { await adminWithdrawApprove(id); await load() } catch {} }
-  async function complete(id) { try { await adminWithdrawComplete(id); await load() } catch {} }
+  async function complete(id) {
+    try {
+      const it = items.find(x=>x.id===id)
+      await adminWithdrawComplete(id)
+      await load()
+      // notify user
+      try {
+        const phone = it?.phone || ''
+        let uid = null
+        try { const r = await api.get(`/admin/users?q=${encodeURIComponent(phone)}`); const arr = Array.isArray(r?.users)?r.users:[]; const m = arr.find(u=>String(u.phone)===String(phone)); uid = m?.id || phone || 'guest' } catch { uid = phone || 'guest' }
+        const title = '提现到账'
+        const body = `您的${String(it?.currency||'')}提现 ${Number(it?.amount||0)} 已到账`
+        notificationsApi.add(uid, { title, body })
+      } catch {}
+    } catch {}
+  }
   async function reject(id) { try { await adminWithdrawReject(id); await load() } catch {} }
 
   const fmtTime = (ts) => {

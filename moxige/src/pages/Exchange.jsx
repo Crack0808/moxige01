@@ -4,7 +4,7 @@ import BottomNav from "../components/BottomNav.jsx";
 import { useI18n } from "../i18n.jsx";
 import { api, notificationsApi } from "../services/api.js";
 import { getUsdMxnRate } from "../services/marketData.js";
-import { formatMoney } from "../utils/money.js";
+import { formatMoney, formatMXN, formatUSDT } from "../utils/money.js";
 
 function readSession() {
   try { return JSON.parse(localStorage.getItem("sessionUser") || "null"); } catch { return null; }
@@ -156,9 +156,10 @@ export default function Exchange() {
     try {
       const nid = uid || me?.phone || "guest";
       const title = lang === "es" ? "Intercambio exitoso" : "Swap Successful";
+      const fmt = (v, cur) => (cur === "MXN" ? formatMXN(v, lang) : (cur === "USDT" ? formatUSDT(v, lang) : formatMoney(v, "USD", lang)));
       const body = lang === "es"
-        ? `Has convertido ${formatMoney(amt, from)} a ${formatMoney(recv, to)}`
-        : `Converted ${formatMoney(amt, from)} to ${formatMoney(recv, to)}`;
+        ? `Has convertido ${fmt(amt, from)} a ${fmt(recv, to)}`
+        : `Converted ${fmt(amt, from)} to ${fmt(recv, to)}`;
       notificationsApi.add(nid, { title, body, pinned: false });
     } catch {}
   };
@@ -179,6 +180,11 @@ export default function Exchange() {
             <button className={`pill ${from === "USD" ? "active" : ""}`} onClick={() => setFrom("USD")}>USD</button>
             <button className={`pill ${from === "USDT" ? "active" : ""}`} onClick={() => setFrom("USDT")}>USDT</button>
           </div>
+          {(() => {
+            const val = from === "MXN" ? balanceMXN : from === "USD" ? balanceUSD : balanceUSDT;
+            const formatted = from === "MXN" ? formatMXN(val, lang) : from === "USDT" ? formatUSDT(val, lang) : formatMoney(val, "USD", lang);
+            return <div className="desc" style={{ marginTop: 6 }}>{t("balanceLabel")}: {formatted}</div>;
+          })()}
 
           <label className="label" style={{ marginTop: 10 }}>{t("labelTo")}</label>
           <div style={{ display: "flex", gap: 8 }}>
@@ -186,6 +192,11 @@ export default function Exchange() {
             <button className={`pill ${to === "USD" ? "active" : ""}`} onClick={() => setTo("USD")}>USD</button>
             <button className={`pill ${to === "USDT" ? "active" : ""}`} onClick={() => setTo("USDT")}>USDT</button>
           </div>
+          {(() => {
+            const val = to === "MXN" ? balanceMXN : to === "USD" ? balanceUSD : balanceUSDT;
+            const formatted = to === "MXN" ? formatMXN(val, lang) : to === "USDT" ? formatUSDT(val, lang) : formatMoney(val, "USD", lang);
+            return <div className="desc" style={{ marginTop: 6 }}>{t("balanceLabel")}: {formatted}</div>;
+          })()}
 
           <label className="label" style={{ marginTop: 10 }}>{t("labelAmount")} ({from})</label>
           <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={from === "MXN" ? t("placeholderAmountMXN") : (from === "USD" ? t("placeholderAmountUSD") : t("placeholderAmountUSDT"))} />

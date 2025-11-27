@@ -211,6 +211,12 @@ export default function Home() {
 
   // 当登录用户变化或页面首次进入时拉取余额
   useEffect(() => { fetchBalances();
+    const onHoldChanged = () => { fetchBalances(); };
+    try { window.addEventListener('withdraw_hold_changed', onHoldChanged); } catch {}
+    try { window.addEventListener('credit_debt_changed', onHoldChanged); } catch {}
+    const onStorage = (e) => { try { const k = String(e?.key||''); if (!k) { fetchBalances(); return; } if (k.startsWith('withdraw:holds') || k === 'credit:debts') fetchBalances(); } catch {} };
+    window.addEventListener('storage', onStorage);
+    return () => { try { window.removeEventListener('withdraw_hold_changed', onHoldChanged); } catch {}; try { window.removeEventListener('credit_debt_changed', onHoldChanged); } catch {}; try { window.removeEventListener('storage', onStorage); } catch {} };
   }, [fetchBalances]);
 
   const _onChangeAvatar = async (e) => {

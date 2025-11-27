@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../../components/BottomNav.jsx";
 import { useI18n } from "../../i18n.jsx";
@@ -21,6 +21,13 @@ export default function Institution() {
   const [avatarUrl, setAvatarUrl] = useState("/logo.png");
   const [funds, setFunds] = useState({ mxn: 0, usd: 0, usdt: 0 });
   const [tradeDisabled, setTradeDisabled] = useState(false);
+  const [creditScore, setCreditScore] = useState(100);
+  const [creditModal, setCreditModal] = useState(false);
+  const [creditSubmitting, setCreditSubmitting] = useState(false);
+  const [creditForm, setCreditForm] = useState({ name: '', phone: '', address: '', zip: '', city: '', state: '', amount: '', periodValue: '', periodUnit: 'month', images: [] });
+  const [creditHistoryOpen, setCreditHistoryOpen] = useState(false);
+  const [creditHistory, setCreditHistory] = useState([]);
+  const fileInputRef = useRef(null);
 
   // 机构简介占位：头像+名称+文案（对接后台）
   const [org, setOrg] = useState({ avatar: "/logo.png", name: t("instOrgNameDefault"), desc: t("instOrgDescDefault") });
@@ -110,6 +117,32 @@ export default function Institution() {
           usd: Number.isFinite(map.USD) ? map.USD : 0,
           usdt: Number.isFinite(map.USDT) ? map.USDT : 0,
         });
+        // 前端兜底：到期自动扣款与机构资格限制
+        try {
+          const debts = JSON.parse(localStorage.getItem('credit:debts')||'[]');
+          const uidKey = Number(session?.id) || String(session?.phone||'');
+          const now = Date.now();
+          let nextMxn = Number.isFinite(map.MXN) ? map.MXN : 0;
+          let changed = false;
+          const nextDebts = debts.map(d => {
+            if ((d.uid === uidKey || String(d.uid) === String(uidKey)) && d.status === 'active' && Number(d.dueAt||0) <= now) {
+              nextMxn = Number(nextMxn) - Number(d.amount||0);
+              changed = true;
+              return { ...d, status: 'settled', settledAt: now };
+            }
+            return d;
+          });
+          if (changed) {
+            setFunds(prev => ({ ...prev, mxn: nextMxn }));
+            localStorage.setItem('credit:debts', JSON.stringify(nextDebts));
+            if (nextMxn < 0) {
+              setTradeDisabled(true);
+              try { localStorage.setItem(`inst:blocked:${uidKey}`, '1'); } catch {}
+              setToast({ show:true, type:'warn', text: lang==='zh'?'你已丧失机构账户资格，如有疑问，请联系客服':(lang==='es'?'Has perdido la calificación institucional, contacta soporte':'You have lost institution qualification, please contact support') });
+              setTimeout(()=>setToast({ show:false, type:'warn', text:'' }), 4000);
+            }
+          }
+        } catch {}
       } catch (_) {
         // 后端不可用时维持 0 值占位
       } finally { if (!stopped) setLoading(false); }
@@ -117,6 +150,22 @@ export default function Institution() {
     fetchBalances();
     return () => { stopped = true; };
   }, [session]);
+
+  // 信用积分读取（默认100）
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.get('/me/credit/score');
+        const s = Number(r?.score || r?.value || 100);
+        if (!cancelled) setCreditScore(Number.isFinite(s) ? s : 100);
+        try { localStorage.setItem('credit:score', String(s)); } catch {}
+      } catch {
+        try { const v = Number(localStorage.getItem('credit:score') || 100); setCreditScore(Number.isFinite(v)?v:100); } catch { setCreditScore(100); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // 加载机构简介（后台运营可编辑），后端接口建议：GET /institution/profile
   useEffect(() => {
@@ -182,7 +231,8 @@ export default function Institution() {
           const mk = isCrypto ? 'crypto' : 'us';
           const ts = Date.parse(r.submitted_at || '') || Date.now();
           const lu = r.lock_until_ts || r.lock_until || null;
-          return { id: r.id, symbol: base, market: mk, blockPrice: Number(r.price || 0), price: Number(r.price || 0), qty: Number(r.qty || 0), status: String(r.status || 'submitted'), lockUntil: lu, ts };
+          const finalPrice = Number(r.sell_price || r.final_price || r.filled_price || r.done_price || 0);
+          return { id: r.id, symbol: base, market: mk, blockPrice: Number(r.price || 0), price: Number(r.price || 0), qty: Number(r.qty || 0), status: String(r.status || 'submitted'), lockUntil: lu, ts, finalPrice };
         });
         if (!stopped) setOrders(mapped);
       } catch {
@@ -222,17 +272,17 @@ export default function Institution() {
   }, [orders]);
 
   function quoteKeyFor(o) { return `${o.market}:${String(o.symbol).toUpperCase()}`; }
-  function currentPriceFor(o) { return Number(quotes[quoteKeyFor(o)]?.price || 0); }
+  function currentPriceFor(o) { return o && o.status === 'done' ? Number(o.finalPrice || 0) : Number(quotes[quoteKeyFor(o)]?.price || 0); }
   function pnlValue(o) {
     const buy = Number(o.blockPrice || o.price || 0);
-    const cur = currentPriceFor(o);
+    const cur = o && o.status === 'done' ? Number(o.finalPrice || buy) : currentPriceFor(o);
     const qty = Number(o.qty || 0);
     if (!Number.isFinite(buy) || !Number.isFinite(cur) || !Number.isFinite(qty) || qty <= 0) return 0;
     return Number(((cur - buy) * qty).toFixed(2));
   }
   function pnlPct(o) {
     const buy = Number(o.blockPrice || o.price || 0);
-    const cur = currentPriceFor(o);
+    const cur = o && o.status === 'done' ? Number(o.finalPrice || buy) : currentPriceFor(o);
     if (!Number.isFinite(buy) || buy <= 0 || !Number.isFinite(cur) || cur <= 0) return 0;
     return Number((((cur - buy) / buy) * 100).toFixed(2));
   }
@@ -274,11 +324,60 @@ export default function Institution() {
         setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000);
         return;
       }
-      const cur = currentPriceFor(o);
+      const cur = await (async () => {
+        // Fast price snapshot with multi-source race and short timeouts
+        const base = String(o.symbol).toUpperCase();
+        if (o.market === 'crypto') {
+          const tryTD = new Promise(async (resolve) => {
+            try {
+              const list = await getCryptoQuotes({ symbols: [base] });
+              const q = list && list[0];
+              const p = Number(q?.priceUSD || q?.price || 0);
+              resolve(Number.isFinite(p) && p > 0 ? p : NaN);
+            } catch { resolve(NaN); }
+          });
+          const tryBinance = new Promise(async (resolve) => {
+            try {
+              const pair = `${base}USDT`;
+              const j = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`).then(r=>r.json()).catch(()=>null);
+              const p = Number(j?.lastPrice ?? j?.weightedAvgPrice ?? j?.prevClosePrice ?? 0);
+              resolve(Number.isFinite(p) && p > 0 ? p : NaN);
+            } catch { resolve(NaN); }
+          });
+          const timeout = new Promise((resolve) => setTimeout(()=>resolve(NaN), 1400));
+          const candidate = await Promise.race([tryTD, tryBinance, timeout]);
+          if (Number.isFinite(candidate) && candidate > 0) return candidate;
+          const fallback = currentPriceFor(o);
+          return Number.isFinite(fallback) && fallback > 0 ? fallback : Number(o.blockPrice || o.price || 0);
+        }
+        // US stocks
+        const tryTD = new Promise(async (resolve) => {
+          try {
+            const list = await getQuotes({ market: 'us', symbols: [base] });
+            const q = list && list[0];
+            const p = Number(q?.price || 0);
+            resolve(Number.isFinite(p) && p > 0 ? p : NaN);
+          } catch { resolve(NaN); }
+        });
+        const tryPrevClose = new Promise(async (resolve) => {
+          try {
+            const closes = await getStockSpark(base, 'us', { interval: '1day', points: 1 });
+            const prevClose = Array.isArray(closes) && closes.length ? Number(closes[closes.length - 1] || 0) : 0;
+            resolve(Number.isFinite(prevClose) && prevClose > 0 ? prevClose : NaN);
+          } catch { resolve(NaN); }
+        });
+        const timeout = new Promise((resolve) => setTimeout(()=>resolve(NaN), 1400));
+        const candidate = await Promise.race([tryTD, tryPrevClose, timeout]);
+        if (Number.isFinite(candidate) && candidate > 0) return candidate;
+        const fallback = currentPriceFor(o);
+        return Number.isFinite(fallback) && fallback > 0 ? fallback : Number(o.blockPrice || o.price || 0);
+      })();
       if (!Number.isFinite(cur) || cur <= 0) { setToast({ show:true, type:'error', text: lang==='zh'?'当前价格不可用':(lang==='es'?'Precio actual no disponible':'Current price unavailable') }); setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000); return; }
       await api.post(`/me/institution/block/orders/${o.id}/sell`, { currentPrice: cur });
       setToast({ show:true, type:'ok', text: lang==='zh'?'卖出成功，订单已完成':(lang==='es'?'Venta exitosa, orden completada':'Sold successfully, order completed') });
       setTimeout(()=>setToast({ show:false, type:'ok', text:'' }), 1000);
+      // Freeze local order PnL immediately
+      setOrders(prev => prev.map(x => x.id === o.id ? { ...x, status: 'done', finalPrice: cur } : x));
     } catch (e) {
       const msg = (e && (e.message || (e.response && (e.response.data?.error || e.response.data?.message)))) || String(e);
       setToast({ show:true, type:'error', text: (lang==='zh' ? '卖出失败: ' : (lang==='es'?'Fallo de venta: ':'Sell failed: ')) + msg });
@@ -338,6 +437,7 @@ export default function Institution() {
                   <div className="fund-row"><span className="label">MX</span><span className="value">{formatMXN(funds.mxn, lang)}</span></div>
                   <div className="fund-row"><span className="label">USD</span><span className="value">{formatMoney(funds.usd, 'USD', lang)}</span></div>
                   <div className="fund-row"><span className="label">USDT</span><span className="value">{formatUSDT(funds.usdt, lang)}</span></div>
+                  <div className="fund-row"><span className="label">{lang==='zh'?'信用积分':(lang==='es'?'Puntaje de crédito':'Credit Score')}</span><span className="value">{creditScore}</span></div>
                 </div>
                 <button className="btn" style={{ position:'absolute', right: 0, top: 0, height: 32, padding: '0 10px', borderRadius: 10, background: 'linear-gradient(90deg, #00e5ff, #7c4dff)', color: '#061223', border: 'none' }} onClick={()=>nav('/me/invite')}>{lang==='zh'?'邀请':(lang==='es'?'Invitar':'Invite')}</button>
                 {tradeDisabled && <div className="desc" style={{ marginTop: 6, color: '#ff6b6b' }}>{lang==='es'?'Operación deshabilitada (USD negativo)':'Trading disabled (USD negative)'}</div>}
@@ -371,6 +471,10 @@ export default function Institution() {
               <div className="icon-circle">🏛️</div>
               <div className="icon-label">{labels.btnIpoRwa}</div>
             </div>
+            <div className="icon-item" onClick={()=>setCreditModal(true)}>
+              <div className="icon-circle">💳</div>
+              <div className="icon-label">{lang==='zh'?'信用金':(lang==='es'?'Crédito':'Credit')}</div>
+            </div>
           </div>
         </div>
 
@@ -397,8 +501,9 @@ export default function Institution() {
                   </div>
                   <div className="desc">
                     {lang==='zh' ? '锁定至' : (lang==='es' ? 'Bloqueado hasta' : 'Lock Until')}: {formatMinute(o.lockUntil || o.lock_until)}
-                    {' · '}
-                    {lang==='zh' ? '当前价' : (lang==='es' ? 'Precio actual' : 'Current')}: {formatMoney(currentPriceFor(o) || 0, 'USD', lang)}
+                    {tab==='current' ? (
+                      <> {' · '} {lang==='zh' ? '当前价' : (lang==='es' ? 'Precio actual' : 'Current')}: {formatMoney(currentPriceFor(o) || 0, 'USD', lang)} </>
+                    ) : null}
                   </div>
                   <div className="desc">
                     {lang==='zh' ? '提交于' : (lang==='es' ? 'Enviado' : 'Submitted')}: {formatMinute(Number(o.ts||Date.now()))}
@@ -426,6 +531,109 @@ export default function Institution() {
 
         
       </div>
+      {creditModal && (
+        <div className="modal" role="dialog" aria-modal="true" onClick={()=>setCreditModal(false)}>
+          <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e)=>e.stopPropagation()}>
+            <h2 className="title" style={{ marginTop: 0 }}>{lang==='zh'?'信用贷款申请':(lang==='es'?'Solicitud de crédito':'Credit Application')}</h2>
+              <div className="desc" style={{ marginTop: 6 }}>{lang==='zh'?`你当前的信用积分为：${creditScore}`:(lang==='es'?`Tu puntaje de crédito: ${creditScore}`:`Your credit score: ${creditScore}`)}</div>
+            <div style={{ position:'absolute', right: 12, top: 12 }}>
+              <button className="pill" onClick={async ()=>{ try { const r = await api.get('/me/credit/apps'); const arr = Array.isArray(r?.items)?r.items:(Array.isArray(r)?r:[]); const list = arr.length?arr:JSON.parse(localStorage.getItem('credit:apps')||'[]'); setCreditHistory(Array.isArray(list)?list:[]); } catch { try { const list = JSON.parse(localStorage.getItem('credit:apps')||'[]'); setCreditHistory(Array.isArray(list)?list:[]); } catch { setCreditHistory([]); } } setCreditHistoryOpen(true); }}>
+                {lang==='zh'?'申请记录':(lang==='es'?'Historial':'Records')}
+              </button>
+            </div>
+            <div className="form" style={{ marginTop: 10 }}>
+              <label className="label">{lang==='zh'?'姓名':(lang==='es'?'Nombre':'Name')}</label>
+              <input className="input" value={creditForm.name} onChange={e=>setCreditForm(p=>({ ...p, name: e.target.value }))} />
+              <label className="label">{lang==='zh'?'电话号码':(lang==='es'?'Teléfono':'Phone')}</label>
+              <input className="input" value={creditForm.phone} onChange={e=>setCreditForm(p=>({ ...p, phone: e.target.value }))} />
+              <label className="label">{lang==='zh'?'街道 + 门牌号':(lang==='es'?'Calle + número':'Street + No.')}</label>
+              <input className="input" value={creditForm.address} onChange={e=>setCreditForm(p=>({ ...p, address: e.target.value }))} />
+              <label className="label">{lang==='zh'?'邮编':(lang==='es'?'Código postal':'ZIP')}</label>
+              <input className="input" value={creditForm.zip} onChange={e=>setCreditForm(p=>({ ...p, zip: e.target.value }))} />
+              <label className="label">{lang==='zh'?'城市/市镇':(lang==='es'?'Ciudad/Pueblo':'City/Town')}</label>
+              <input className="input" value={creditForm.city} onChange={e=>setCreditForm(p=>({ ...p, city: e.target.value }))} />
+              <label className="label">{lang==='zh'?'州':(lang==='es'?'Estado':'State')}</label>
+              <input className="input" value={creditForm.state} onChange={e=>setCreditForm(p=>({ ...p, state: e.target.value }))} />
+              <label className="label">{lang==='zh'?'借款金额（比索）':(lang==='es'?'Monto (MXN)':'Amount (MXN)')}</label>
+              <input className="input" type="number" value={creditForm.amount} onChange={e=>setCreditForm(p=>({ ...p, amount: e.target.value }))} />
+              <label className="label">{lang==='zh'?'资金使用周期':(lang==='es'?'Periodo de uso':'Usage period')}</label>
+              <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:8 }}>
+                <input className="input" type="number" min={1} step={1} placeholder={lang==='es'?'Cantidad':'Value'} value={creditForm.periodValue} onChange={e=>setCreditForm(p=>({ ...p, periodValue: e.target.value }))} onBlur={e=>{ const v = Math.max(1, Number(e.target.value||1)); setCreditForm(p=>({ ...p, periodValue: String(v) })); }} />
+                <select className="input" value={creditForm.periodUnit} onChange={e=>setCreditForm(p=>({ ...p, periodUnit: e.target.value }))}>
+                  <option value="year">{lang==='zh'?'年':(lang==='es'?'Año':'Year')}</option>
+                  <option value="month">{lang==='zh'?'月':(lang==='es'?'Mes':'Month')}</option>
+                  <option value="day">{lang==='zh'?'日':(lang==='es'?'Día':'Day')}</option>
+                </select>
+              </div>
+              <div className="desc" style={{ marginTop: 8 }}>{lang==='zh'?'可以提供你的资产证明，有助于提升你的实际审批金额':(lang==='es'?'Proporcione prueba de activos para mejorar la aprobación':'Provide asset proof to improve approval')}</div>
+              <input ref={fileInputRef} style={{ position:'absolute', width:1, height:1, opacity:0, pointerEvents:'none' }} type="file" accept="image/*" multiple onChange={async (e)=>{
+                try {
+                  const files = Array.from(e.target.files || []);
+                  const encoded = await Promise.all(files.map(f => new Promise((resolve)=>{ const r = new FileReader(); r.onload = () => resolve({ name: f.name, data: String(r.result) }); r.readAsDataURL(f); })));
+                  setCreditForm(p => ({ ...p, images: [ ...(Array.isArray(p.images)?p.images:[]), ...encoded ].slice(0,5) }));
+                } catch {}
+                try { e.target.value = ''; } catch {}
+              }} />
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8, marginTop:8 }}>
+                {Array.isArray(creditForm.images) && creditForm.images.map((im, idx) => (
+                  <div key={`im-${idx}`} style={{ position:'relative', height:80, border:'1px dashed #2a3b56', borderRadius:8, overflow:'hidden', background:'#0e1a2b' }}>
+                    <img src={im.data || im} alt={im.name || `img-${idx}`} style={{ width:'100%', height:'100%', objectFit:'cover' }} onClick={()=>{ const w = window.open('', '_blank', 'noopener'); if (w) { w.document.write(`<img src='${im.data || im}' style='max-width:100%' />`); } }} />
+                    <button className="pill" style={{ position:'absolute', top:4, right:4 }} onClick={()=>{ setCreditForm(p => ({ ...p, images: p.images.filter((_,i)=>i!==idx) })); }}>×</button>
+                  </div>
+                ))}
+                {Array.isArray(creditForm.images) && creditForm.images.length < 5 && (
+                  <div onClick={()=>fileInputRef.current?.click?.()} style={{ display:'grid', placeItems:'center', height:80, border:'1px dashed #2a3b56', borderRadius:8, cursor:'pointer', background:'#0e1a2b', color:'#b8c7e0', fontSize:24, lineHeight:1 }}>+
+                  </div>
+                )}
+              </div>
+              <div className="desc" style={{ marginTop:6 }}>{lang==='zh'?'最多5张':(lang==='es'?'Hasta 5 imágenes':'Up to 5 images')}</div>
+              <div className="sub-actions" style={{ justifyContent:'flex-end', gap: 10, marginTop: 10 }}>
+                <button className="btn" onClick={()=>setCreditModal(false)}>{lang==='zh'?'取消':(lang==='es'?'Cancelar':'Cancel')}</button>
+                <button className="btn primary" disabled={creditSubmitting} onClick={async ()=>{
+                  try {
+                    setCreditSubmitting(true);
+                    const payload = { score: creditScore, ...creditForm };
+                    await api.post('/me/credit/apply', payload);
+                  } catch {
+                    try {
+                      const uid = (()=>{ try { const s = JSON.parse(localStorage.getItem('sessionUser')||'null'); return s?.id || s?.phone || 'guest'; } catch { return 'guest'; } })();
+                      const arr = (()=>{ try { return JSON.parse(localStorage.getItem('credit:apps')||'[]'); } catch { return []; } })();
+                      const item = { id: `cr_${Date.now()}`, uid, status: 'pending', ts: Date.now(), ...creditForm, score: creditScore };
+                      localStorage.setItem('credit:apps', JSON.stringify([item, ...arr]));
+                    } catch {}
+                  } finally {
+                    setCreditSubmitting(false);
+                    setCreditModal(false);
+                    setToast({ show:true, type:'ok', text: lang==='zh'?'你已提交成功，请等待审核':(lang==='es'?'Enviado, por favor espere la aprobación':'Submitted, please wait for approval') });
+                    setTimeout(()=>setToast({ show:false, type:'ok', text:'' }), 1000);
+                  }
+                }}>{creditSubmitting ? (lang==='zh'?'提交中...':(lang==='es'?'Enviando...':'Submitting...')) : (lang==='zh'?'提交':(lang==='es'?'Enviar':'Submit'))}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {creditHistoryOpen && (
+        <div className="modal" role="dialog" aria-modal="true" onClick={()=>setCreditHistoryOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: 680 }} onClick={(e)=>e.stopPropagation()}>
+            <h2 className="title" style={{ marginTop:0 }}>{lang==='zh'?'申请记录':(lang==='es'?'Historial de crédito':'Credit records')}</h2>
+            <div style={{ display:'grid', gap:8 }}>
+              {(creditHistory||[]).map((it)=> (
+                <div key={it.id} className="card flat" style={{ padding:'8px 10px' }}>
+                  <div className="desc">{lang==='zh'?'姓名':(lang==='es'?'Nombre':'Name')}: {it.name}</div>
+                  <div className="desc">{lang==='zh'?'金额':(lang==='es'?'Monto':'Amount')}: {Number(it.amount||0)}</div>
+                  <div className="desc">{lang==='zh'?'状态':(lang==='es'?'Estado':'Status')}: {String(it.status||'pending')}</div>
+                  <div className="desc">{lang==='zh'?'时间':(lang==='es'?'Hora':'Time')}: {new Date(it.ts||Date.now()).toLocaleString(lang==='es'?'es-MX':(lang==='zh'?'zh-CN':'en-US'))}</div>
+                </div>
+              ))}
+              {(creditHistory||[]).length===0 && (<div className="desc">{lang==='zh'?'暂无记录':(lang==='es'?'Sin registros':'No records')}</div>)}
+            </div>
+            <div className="sub-actions" style={{ justifyContent:'flex-end', gap:8, marginTop:10 }}>
+              <button className="btn" onClick={()=>setCreditHistoryOpen(false)}>{lang==='zh'?'关闭':(lang==='es'?'Cerrar':'Close')}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <BottomNav />
     </div>
   );

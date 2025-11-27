@@ -359,6 +359,10 @@ export default function IpoRwaPage() {
   }
   function orderCurrentPrice(o) {
     const code = fixSymbol(o.code);
+    if (String(o.status||'').toLowerCase()==='done' || String(o.status||'').toLowerCase()==='sold' || String(o.status||'').toLowerCase()==='filled' || String(o.status||'').toLowerCase()==='completed') {
+      const fp = Number(o.finalPrice || o.sellPrice || o.filledPrice || o.closePrice || 0);
+      return Number.isFinite(fp) && fp>0 ? fp : 0;
+    }
     const p = orderPrices[code];
     return Number.isFinite(p) && p>0 ? p : 0;
   }
@@ -382,7 +386,28 @@ export default function IpoRwaPage() {
     const { listed, listingDay, allowedToday } = canSellOrder(o);
     if (!listed) { setToast({ show:true, type:'error', text: lang==='zh'?'未上市，暂不可卖出':(lang==='es'?'No listado, no se puede vender':'Not listed, cannot sell') }); setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000); return; }
     if (listingDay && !allowedToday) { setToast({ show:true, type:'error', text: lang==='zh'?'上市当日不可卖出':(lang==='es'?'No vender en día de listado':'Cannot sell on listing day') }); setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000); return; }
+    // Snapshot latest price quickly (US)
+    const symbol = fixSymbol(o.code);
+    const tryTD = new Promise(async (resolve) => {
+      try {
+        const qs = await getQuotes({ market: 'us', symbols: [symbol] });
+        const p = Number(qs?.[0]?.price || 0);
+        resolve(Number.isFinite(p) && p > 0 ? p : NaN);
+      } catch { resolve(NaN); }
+    });
+    const tryPrevClose = new Promise(async (resolve) => {
+      try {
+        const closes = await getStockSpark(symbol, 'us', { interval: '1day', points: 1 });
+        const prevClose = Array.isArray(closes) && closes.length ? Number(closes[closes.length - 1] || 0) : 0;
+        resolve(Number.isFinite(prevClose) && prevClose > 0 ? prevClose : NaN);
+      } catch { resolve(NaN); }
+    });
+    const timeout = new Promise((resolve) => setTimeout(()=>resolve(NaN), 1400));
+    let cp = await Promise.race([tryTD, tryPrevClose, timeout]);
+    if (!Number.isFinite(cp) || cp <= 0) cp = orderCurrentPrice(o);
     setToast({ show:true, type:'ok', text: lang==='zh'?'卖出成功':(lang==='es'?'Venta exitosa':'Sold') }); setTimeout(()=>setToast({ show:false, type:'ok', text:'' }), 1000);
+    // Freeze locally
+    setOrders(prev => prev.map(x => x.id === o.id ? { ...x, status: 'done', finalPrice: Number(cp||0) } : x));
   }
 
   return (
@@ -475,13 +500,19 @@ export default function IpoRwaPage() {
                   <div style={{ display:'grid', gap:6 }}>
                     <div style={{ fontWeight:700 }}>{'US Stocks'} · {det.name || code}</div>
                     <div className="desc">{lang==='es'?'Fecha de listado':'Listing Date'}: {det.listAt ? formatYMD(det.listAt) : '-'}</div>
-                    <div className="desc">{lang==='es'?'Precio actual':'Current Price'}: {formatMoney(Number(cur||0),'USD',lang)}</div>
+                    {!(String(o.status||'').toLowerCase()==='done' || String(o.status||'').toLowerCase()==='sold' || String(o.status||'').toLowerCase()==='filled' || String(o.status||'').toLowerCase()==='completed') && (
+                      <div className="desc">{lang==='es'?'Precio actual':'Current Price'}: {formatMoney(Number(cur||0),'USD',lang)}</div>
+                    )}
                     <div className="desc">{lang==='es'?'Precio de subscripción':'Subscribe Price'}: {formatMoney(price,'USD',lang)}</div>
                   </div>
                   <div style={{ display:'grid', justifyItems:'end', alignContent:'start', gap:8 }}>
                     <div style={{ fontSize:18, fontWeight:700, color }}>{pct}%</div>
                     <div style={{ fontSize:14, color }}>{formatMoney(amount,'USD',lang)}</div>
-                    <button className="btn primary" onClick={()=>onSell(o)}>{lang==='es'?'Vender':'Sell'}</button>
+                    {!(String(o.status||'').toLowerCase()==='done' || String(o.status||'').toLowerCase()==='sold' || String(o.status||'').toLowerCase()==='filled' || String(o.status||'').toLowerCase()==='completed') ? (
+                      <button className="btn primary" onClick={()=>onSell(o)}>{lang==='es'?'Vender':'Sell'}</button>
+                    ) : (
+                      <span className="tag" style={{ background: '#274a36' }}>{lang==='es'?'Completado':'Completed'}</span>
+                    )}
                   </div>
                 </div>
               </div>

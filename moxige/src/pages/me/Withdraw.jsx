@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { meWithdrawCreate, meWithdrawList, meWithdrawCancel } from "../../services/api";
+import { meWithdrawCreate, meWithdrawList, meWithdrawCancel, notificationsApi } from "../../services/api";
 import { api } from "../../services/api.js";
 import { useI18n } from "../../i18n.jsx";
 
@@ -21,14 +21,28 @@ export default function Withdraw() {
   const [toast, setToast] = useState({ show: false, text: '', type: 'ok' });
 
   useEffect(() => { loadRecords(); loadBindings(); loadBalances(); }, []);
-  async function loadRecords() { try { const r = await meWithdrawList(); setRecords(r.items || []); } catch {} }
+  async function loadRecords() {
+    try {
+      const r = await meWithdrawList();
+      const items = r.items || [];
+      setRecords(items);
+      try {
+        const sess = JSON.parse(localStorage.getItem('sessionUser')||'null');
+        const uid = sess?.id || sess?.phone || 'guest';
+        const holds = JSON.parse(localStorage.getItem(`withdraw:holds:${uid}`)||'[]');
+        const idsDone = new Set(items.filter(x=>x.status==='completed' || x.status==='rejected').map(x=>x.id));
+        const next = Array.isArray(holds)?holds.map(h=> idsDone.has(h.id) ? { ...h, status: 'settled' } : h ):[];
+        localStorage.setItem(`withdraw:holds:${uid}`, JSON.stringify(next));
+      } catch {}
+    } catch {}
+  }
   async function loadBalances() {
     try {
       const r = await api.get('/me/balances');
       const arr = Array.isArray(r?.balances) ? r.balances : [];
       const map = arr.reduce((m, it) => { m[String(it.currency || '').toUpperCase()] = Number(it.amount || 0); return m; }, {});
       setBalances({ usd: Number(map.USD||0), mxn: Number(map.MXN||0), usdt: Number(map.USDT||0) });
-    } catch {}
+    } catch { /* 保持现值，避免误显示 */ }
   }
   async function loadBindings() {
     try {
@@ -77,7 +91,29 @@ export default function Withdraw() {
       if (!Number.isFinite(amt) || amt <= 0) { setError(t('errorAmountInvalid') || 'Invalid amount'); return; }
       if (amt > curBal) { setError(t('errorInsufficientBalance') || 'Insufficient balance'); return; }
       const payload = { currency, amount: Number(amount||0), method_type: methodType, bank_account: bankAccount, usdt_address: usdtAddress, usdt_network: usdtNetwork };
-      await meWithdrawCreate(payload);
+      const res = await meWithdrawCreate(payload);
+      const createdId = res?.id || res?.withdraw_id || `wd_${Date.now()}`;
+      // hold funds immediately (frontend fallback)
+      try {
+        const sess = JSON.parse(localStorage.getItem('sessionUser')||'null');
+        const uid = sess?.id || sess?.phone || 'guest';
+        const holds = JSON.parse(localStorage.getItem(`withdraw:holds:${uid}`)||'[]');
+        const holdItem = { id: createdId, currency, amount: amt, status: 'active', ts: Date.now() };
+        holds.unshift(holdItem);
+        localStorage.setItem(`withdraw:holds:${uid}`, JSON.stringify(holds));
+        // try to link to real server id by fetching latest records
+        try {
+          const list = await meWithdrawList();
+          const items = Array.isArray(list?.items) ? list.items : [];
+          const pending = items.filter(x => String(x.status||'') === 'pending' && String(x.currency||'') === currency && Number(x.amount||0) === amt);
+          const newest = pending.sort((a,b)=> new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+          if (newest && newest.id) {
+            const updated = (JSON.parse(localStorage.getItem(`withdraw:holds:${uid}`)||'[]')||[]).map(h => (h === holdItem || h.id === createdId) ? { ...h, id: newest.id } : h);
+            localStorage.setItem(`withdraw:holds:${uid}`, JSON.stringify(updated));
+          }
+        } catch {}
+        try { window.dispatchEvent(new Event('withdraw_hold_changed')); } catch {}
+      } catch {}
       await loadRecords();
       await loadBalances();
       setAmount('');
@@ -85,7 +121,29 @@ export default function Withdraw() {
       setTimeout(() => setToast({ show: false, type: 'ok', text: '' }), 1000);
     } catch (e) { setError(e?.message || '提交失败'); }
   }
-  async function cancel(id) { try { await meWithdrawCancel(id); await loadRecords(); } catch {} }
+  async function cancel(id) {
+    try {
+      await meWithdrawCancel(id);
+      // refund hold
+      try {
+        const sess = JSON.parse(localStorage.getItem('sessionUser')||'null');
+        const uid = sess?.id || sess?.phone || 'guest';
+        const holds = JSON.parse(localStorage.getItem(`withdraw:holds:${uid}`)||'[]');
+        let matched = false;
+        let next = Array.isArray(holds)?holds.map(h=>{ if (h.id===id) { matched = true; return { ...h, status:'cancelled' }; } return h; }):[];
+        if (!matched) {
+          // fallback: cancel first active hold
+          next = Array.isArray(holds)?holds.map(h=> (h.status==='active' && !matched ? (matched=true, { ...h, status:'cancelled' }) : h)) : [];
+        }
+        localStorage.setItem(`withdraw:holds:${uid}`, JSON.stringify(next));
+        try { window.dispatchEvent(new Event('withdraw_hold_changed')); } catch {}
+      } catch {}
+      await loadRecords();
+      await loadBalances();
+      setToast({ show:true, type:'ok', text: t('withdrawCancelled') || '已取消并返还资金' });
+      setTimeout(()=>setToast({ show:false, type:'ok', text:'' }), 1000);
+    } catch {}
+  }
 
   return (
     <div className="screen withdraw-screen">

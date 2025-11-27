@@ -51,8 +51,12 @@ export default function Notifications() {
         const arr = Array.isArray(data?.items) ? data.items : [];
         if (!cancelled) {
           const ids = new Set(pinnedIds || []);
-          const items = arr.map(it => ({ id: it.id, title: cnToLocale(it.title || 'Notification'), body: cnToLocale(it.message || ''), ts: new Date(it.created_at).getTime(), pinned: (ids.has(it.id) || Boolean(it.pinned)) }));
-          setList(items.sort((a,b) => (Number(b.ts) - Number(a.ts))));
+          if (arr.length > 0) {
+            const items = arr.map(it => ({ id: it.id, title: cnToLocale(it.title || 'Notification'), body: cnToLocale(it.message || ''), ts: new Date(it.created_at).getTime(), pinned: (ids.has(it.id) || Boolean(it.pinned)) }));
+            setList(items.sort((a,b) => (Number(b.ts) - Number(a.ts))));
+            return;
+          }
+          setList(notificationsApi.list(uid).map(x => ({ ...x, title: cnToLocale(x.title), body: cnToLocale(x.body) })));
           return;
         }
       } catch {}
@@ -101,8 +105,6 @@ export default function Notifications() {
                   <div className="notice-list">{it.body}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <button className="pill" onClick={() => togglePin(it.id)}>{it.pinned ? (lang==='es'?'Desfijar':'Unpin') : (lang==='es'?'Fijar':'Pin')}</button>
-                  {it.pinned && <div className="chip info" style={{ marginTop: 6 }}>{pinnedText}</div>}
                   <div className="desc" style={{ fontSize: 11 }}>{timeOf(it.ts)}</div>
                 </div>
               </div>

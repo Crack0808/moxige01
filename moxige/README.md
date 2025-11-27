@@ -114,6 +114,19 @@ VITE_TWELVEDATA_KEY=你的TwelveData密钥
 # VITE_FINNHUB_TOKEN=你的Finnhub密钥
 ```
 
+### TwelveData 密钥配置方式（部署）
+
+- 环境变量（构建时）：在前端构建阶段设置 `VITE_TWELVEDATA_KEY=45a943df091e40af9f9444d58bd520a0`，正常构建发布即可（Docker 构建可传入 ARG `VITE_TWELVEDATA_KEY`）。
+- 页面注入：
+  - 注入脚本：`<script>window.__TD_KEY__='45a943df091e40af9f9444d58bd520a0'</script>`
+  - 或注入 meta：`<meta name="td-key" content="45a943df091e40af9f9444d58bd520a0">`
+  - 或设置 Cookie：`Set-Cookie: td_key=45a943df091e40af9f9444d58bd520a0; Path=/`（若设置为 HttpOnly，前端无法读取）
+- 手动 URL 配置（备用）：访问 `http://your-host/home?tdkey=45a943df091e40af9f9444d58bd520a0`，前端会读取并持久化该密钥。
+
+### RWA 查询保持原逻辑
+
+- 仍走后端接口按合约地址/交易对地址查询：`/api/trade/rwa/price?token=...&chain=...` 或 `?pair=...&chain=...`（端点定义见后端 `server/index.js:3608-3645`）。
+
 说明：
 - 墨西哥（BMV）REST 参数与回退（客服确认）：优先传 `exchange=BMV`，失败则尝试 `mic_code=XMEX`，最后作为兜底不传 `exchange`。符号不唯一时务必传 `exchange` 或 `mic_code`，以避免默认到主市场（如 `AAPL` 默认美国市场）；若符号唯一归属 BMV，可自行决定是否省略 `exchange`。
 - BMV WebSocket 不可用（BMV 为 EOD 交易所，客服确认 Twelve Data WS 不支持 BMV）。本项目仅对美股/加密等使用 WS，墨西哥股票统一采用 REST 轮询。

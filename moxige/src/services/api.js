@@ -231,6 +231,18 @@ export const api = {
   setBase: (u) => { try { activeBase = normalizeBase(String(u||'')); } catch { activeBase = normalizeBase(String(u||'')); } },
 };
 
+export async function fetchBalancesUnified() {
+  const r = await api.get('/me/balances');
+  const arr = Array.isArray(r?.balances) ? r.balances : [];
+  const map = arr.reduce((m, it) => { m[String(it.currency || '').toUpperCase()] = Number(it.amount || 0); return m; }, {});
+  return {
+    mxn: Number(map.MXN || 0),
+    usd: Number(map.USD || 0),
+    usdt: Number(map.USDT || 0),
+    disabled: !!r?.disabled,
+  };
+}
+
 export async function meWithdrawCreate(payload) { return api.post('/me/withdraw/create', payload); }
 export async function meWithdrawList() { return api.get('/me/withdraw/list'); }
 export async function meWithdrawCancel(id) { return api.post(`/me/withdraw/cancel/${id}`); }

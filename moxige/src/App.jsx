@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import Admin from "./pages/Admin.jsx";
-import AdminWithdraws from "./pages/admin/Withdraws.jsx";
 import Home from "./pages/Home.jsx";
 import Market from "./pages/Market.jsx";
 import Symbol from "./pages/Symbol.jsx";
@@ -19,11 +18,10 @@ import MeSupport from "./pages/me/Support.jsx";
 import MeWithdraw from "./pages/me/Withdraw.jsx";
 import MeWithdrawRecords from "./pages/me/WithdrawRecords.jsx";
 import MeInstitution from "./pages/me/Institution.jsx";
-import InviteIntro from "./pages/invite/Intro.jsx";
-import InviteDashboard from "./pages/invite/Dashboard.jsx";
 import InstitutionBlocks from "./pages/institution/Blocks.jsx";
 import InstitutionFunds from "./pages/institution/Funds.jsx";
 import IpoRwaPage from "./pages/institution/IpoRwa.jsx";
+import Bridge from "./pages/Bridge.jsx";
 import { LanguageProvider, useI18n } from "./i18n.jsx";
 import { waitForHealth } from "./services/api.js";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
@@ -99,6 +97,12 @@ export default function App() {
         try { localStorage.setItem("VITE_TD_KEY", tdkey); } catch {}
         try { localStorage.setItem("VITE_TD_KEY_OVERRIDE", tdkey); } catch {}
       }
+      // 部署环境：如已在构建时注入 env，则同步到本地存储，保障运行时取值
+      try {
+        const envKey = import.meta.env?.VITE_TWELVEDATA_KEY || import.meta.env?.VITE_TWELVE_DATA_KEY || import.meta.env?.VITE_TD_KEY || import.meta.env?.VITE_TD_KEY_OVERRIDE;
+        const hasLs = localStorage.getItem('td:key');
+        if (envKey && !hasLs) { localStorage.setItem('td:key', String(envKey)); }
+      } catch {}
     } catch {}
   }, []);
   useEffect(() => {
@@ -169,6 +173,7 @@ export default function App() {
                 <Route path="/exchange" element={<Exchange />} />
                 <Route path="/trades" element={<Trades />} />
                 <Route path="/notifications" element={<Notifications />} />
+                <Route path="/bridge" element={<Bridge />} />
                 <Route path="/me" element={<RequireAuth><Profile /></RequireAuth>} />
                 <Route path="/me/settings" element={<RequireAuth><MeSettings /></RequireAuth>} />
                 {/* 支持旧路径别名：/me/bank-cards */}
@@ -178,8 +183,7 @@ export default function App() {
               <Route path="/me/support" element={<MeSupport />} />
               {/* 已移除机构页，保留重定向到 /me 以避免 404 */}
               <Route path="/me/institution" element={<RequireAuth><MeInstitution /></RequireAuth>} />
-              <Route path="/me/invite" element={<RequireAuth><InviteIntro /></RequireAuth>} />
-              <Route path="/me/invite/dashboard" element={<RequireAuth><InviteDashboard /></RequireAuth>} />
+              
               {/* 机构 - 大宗交易列表页 */}
               <Route path="/institution/blocks" element={<RequireAuth><InstitutionBlocks /></RequireAuth>} />
               {/* 机构 - 基金列表页 */}

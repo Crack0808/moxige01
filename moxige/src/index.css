@@ -600,6 +600,16 @@ input[type="tel"], input[type="password"], input[type="email"], input[type="text
 .admin-form-compact .label { font-size: 14px; opacity: .9; }
 .admin-form-compact .input { height: 36px; font-size: 14px; max-width: 360px; }
 
+/* Institution Blocks mobile tweaks */
+@media (max-width: 640px) {
+  .admin-form-compact { grid-template-columns: 1fr; }
+  .admin-form-compact .input { max-width: 100%; width: 100%; }
+  /* collapse two-column detail grid in blocks cards */
+  .inst-card .card div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  /* ensure tag badge wraps and doesn't overflow */
+  .inst-card .card .tag { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; }
+}
+
 @media (max-width: 920px) {
   .admin-layout { display: block !important; align-items: stretch; justify-content: flex-start; padding: 0; }
   .admin-layout .sidebar { position: fixed; left: 0; top: 0; width: 280px; height: 100vh; border-radius: 0; z-index: 20; }

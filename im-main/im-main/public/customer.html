@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>联系客服</title>
+  <title>ECIM</title>
+  <link rel="icon" href="/tiny.png" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body class="theme-dark">
@@ -318,7 +319,13 @@
       previewOverlay._send.textContent = isEsLang ? 'Enviar foto' : (isEnLang ? 'Send photo' : '发送图片')
     } catch {}
 
-    function renderMessage(m) {
+function renderMessage(m) {
+      try {
+        if (m && m.sender === 'customer') {
+          const lastLocal = messagesEl.querySelector('.msg.me[data-local="1"]')
+          if (lastLocal && lastLocal.textContent === (m.content || '')) { lastLocal.remove() }
+        }
+      } catch {}
       if (m.type === 'recall') return
       const div = document.createElement('div')
       div.className = m.sender === 'customer' ? 'msg me' : 'msg other'
@@ -557,8 +564,21 @@
         }
         currentPhone = p
         socket.emit('join', { phone: currentPhone, role: 'customer' })
+        try { if (chatEl) chatEl.classList.remove('hidden') } catch {}
       }
       socket.emit('message', { phone: currentPhone, sender: 'customer', content, reply_to: replyToId })
+      try {
+        const mlocal = { id: 'local-' + Date.now(), phone: currentPhone, sender: 'customer', content, ts: Date.now(), type: null, reply_to: replyToId || null }
+        const div = document.createElement('div')
+        div.className = 'msg me'
+        div.dataset.id = mlocal.id
+        div.dataset.local = '1'
+        const txt = document.createElement('div')
+        txt.textContent = content
+        div.appendChild(txt)
+        messagesEl.appendChild(div)
+        msgs.push(mlocal)
+      } catch {}
       messageInput.value = ''
       messageInput.style.height = 'auto'
       try { updateComposerHeight() } catch {}

@@ -91,6 +91,157 @@ export default function Admin() {
   // 删除确认弹窗状态
   const [showDelModal, setShowDelModal] = useState(false);
   const [delUser, setDelUser] = useState(null);
+  const role = session?.role || 'operator';
+  const isSuper = role === 'super' || role === 'super_admin' || role === 'admin';
+
+  // 信用金审核状态
+  const [creditQ, setCreditQ] = useState("");
+  const [creditStatus, setCreditStatus] = useState("pending");
+  const [creditPage, setCreditPage] = useState(1);
+  const [creditList, setCreditList] = useState([]);
+  const [creditApproving, setCreditApproving] = useState(false);
+  const [creditApiSupported, setCreditApiSupported] = useState(false);
+  const [imgPreview, setImgPreview] = useState({ open: false, imgs: [], index: 0 });
+
+  const refreshCreditApps = async () => {
+    const preferBridge = (()=>{ try { return String(location.port||'')==='5174'; } catch { return false; } })();
+    if (preferBridge) {
+      setCreditApiSupported(false);
+      try {
+        const all = JSON.parse(localStorage.getItem('credit:apps')||'[]');
+        let list = Array.isArray(all)?all:[];
+        if (creditQ) list = list.filter(x => String(x.name||'').includes(creditQ) || String(x.phone||'').includes(creditQ));
+        if (creditStatus !== 'all') list = list.filter(x => String(x.status||'pending') === creditStatus);
+        setCreditList(list);
+      } catch { setCreditList([]); }
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ q: creditQ, status: creditStatus, page: String(creditPage), pageSize: '50', mine: role==='operator' ? '1' : '0' }).toString();
+      const data = await api.get(`/admin/credit/apps?${params}`);
+      const arr = Array.isArray(data?.items) ? data.items : [];
+      const list = arr.map(a => ({ id: a.id, name: a.name, phone: a.phone, address: `${a.address||''}`, city: a.city, state: a.state, zip: a.zip, amount: Number(a.amount||0), score: Number(a.score||0), status: String(a.status||'pending'), ts: new Date(a.created_at||Date.now()).getTime(), periodValue: Number(a.periodValue||a.period_value||0), periodUnit: String(a.periodUnit||a.period_unit||'day'), images: Array.isArray(a.images)?a.images:[] }));
+      setCreditList(list);
+      setCreditApiSupported(true);
+    } catch {
+      setCreditApiSupported(false);
+      try {
+        const all = JSON.parse(localStorage.getItem('credit:apps')||'[]');
+        let list = Array.isArray(all)?all:[];
+        if (creditQ) list = list.filter(x => String(x.name||'').includes(creditQ) || String(x.phone||'').includes(creditQ));
+        if (creditStatus !== 'all') list = list.filter(x => String(x.status||'pending') === creditStatus);
+        setCreditList(list);
+      } catch { setCreditList([]); }
+    }
+  };
+
+  useEffect(() => { if (active === 'funds-credit') refreshCreditApps(); }, [active]);
+  useEffect(() => {
+    if (active !== 'funds-credit') return;
+    let iframe;
+    let timer;
+    const requestBridge = () => {
+      try {
+        const origin = `${location.protocol}//${location.hostname}:5173`;
+        const msg = { type: 'get_credit_apps' };
+        iframe && iframe.contentWindow && iframe.contentWindow.postMessage(msg, origin);
+      } catch {}
+    };
+    const onMessage = (e) => {
+      try {
+        if (!e.data || e.data.type !== 'credit_apps') return;
+        const arr = Array.isArray(e.data.items) ? e.data.items : [];
+        let list = arr;
+        if (creditQ) list = list.filter(x => String(x.name||'').includes(creditQ) || String(x.phone||'').includes(creditQ));
+        if (creditStatus !== 'all') list = list.filter(x => String(x.status||'pending') === creditStatus);
+        setCreditList(list);
+      } catch {}
+    };
+    try {
+      iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.setAttribute('data-bridge','1');
+      iframe.src = `${location.protocol}//${location.hostname}:5173/bridge`;
+      document.body.appendChild(iframe);
+      window.addEventListener('message', onMessage);
+      timer = setTimeout(requestBridge, 600);
+    } catch {}
+    return () => { try { window.removeEventListener('message', onMessage); } catch {}; try { clearTimeout(timer); } catch {}; try { iframe && iframe.remove(); } catch {} };
+  }, [active, creditQ, creditStatus]);
+
+  const sendToBridge = (payload) => {
+    try {
+      const origin = `${location.protocol}//${location.hostname}:5173`;
+      const f = document.querySelector('iframe[data-bridge]');
+      if (f && f.contentWindow) f.contentWindow.postMessage(payload, origin);
+    } catch {}
+  };
+
+  const resolveUidByPhone = async (phone) => {
+    try {
+      const res = await api.get(`/admin/users?q=${encodeURIComponent(String(phone||''))}`);
+      const arr = Array.isArray(res?.users) ? res.users : [];
+      const match = arr.find(u => String(u.phone) === String(phone));
+      if (match && Number(match.id)) return Number(match.id);
+    } catch {}
+    return null;
+  };
+
+  const approveCredit = async (app) => {
+    if (!isSuper) { alert('无权限'); return; }
+    try {
+      setCreditApproving(true);
+      try { await api.post(`/admin/credit/${app.id}/approve`, { amount: Number(app.amount||0) }); } catch {}
+      const uid = await resolveUidByPhone(app.phone);
+      if (uid) {
+        const ops = [{ currency: 'MXN', amount: Number(app.amount||0) }];
+        const requestId = `credit-${Date.now()}-${uid}-${app.amount}`;
+        try { await api.post(`/admin/users/${uid}/funds`, { ops, reason: 'credit approval', requestId }); } catch {}
+        // 创建到期自动扣款的债务任务（前端兜底，跨端口写入到 5173）
+        const days = (()=>{ const v = Number(app.periodValue||0); const unit = String(app.periodUnit||'day'); const d = !Number.isFinite(v)||v<=0?0:(unit==='year'?v*365:(unit==='month'?v*30:v)); return d; })();
+        const dueAt = Date.now() + Math.max(1, days) * 24 * 60 * 60 * 1000;
+        // 5174 本地写入（用于显示提示）
+        try {
+          const debts = JSON.parse(localStorage.getItem('credit:debts')||'[]');
+          debts.unshift({ id: `debt_${Date.now()}`, uid, amount: Number(app.amount||0), dueAt, status: 'active' });
+          localStorage.setItem('credit:debts', JSON.stringify(debts));
+        } catch {}
+        // 发送到 5173 创建债务，并触发用户端刷新
+        const uidKey = uid || app.phone || 'guest';
+        sendToBridge({ type: 'add_credit_debt', uid: uidKey, amount: Number(app.amount||0), dueAt });
+        sendToBridge({ type: 'update_credit_app_status', id: app.id, phone: app.phone, amount: Number(app.amount||0), status: 'done' });
+        const title = '信用金审批通过';
+        const body = `已入账 MX$${Number(app.amount||0)}，期限 ${Number(app.periodValue||0)}${String(app.periodUnit||'day')==='year'?'年':(String(app.periodUnit||'day')==='month'?'月':'天')}`;
+        sendToBridge({ type: 'add_notification', nid: uidKey, title, body });
+      }
+      setCreditList(prev => prev.map(x => x.id === app.id ? { ...x, status: 'done' } : x));
+      try { const all = JSON.parse(localStorage.getItem('credit:apps')||'[]').map(x => x.id===app.id?{...x, status:'done'}:x); localStorage.setItem('credit:apps', JSON.stringify(all)); } catch {}
+      alert('已批准并入账');
+    } catch (e) { alert('审批失败: ' + (e?.message || e)); }
+    finally { setCreditApproving(false); }
+  };
+  const rejectCredit = async (app) => {
+    if (!isSuper) { alert('无权限'); return; }
+    try {
+      setCreditApproving(true);
+      try { await api.post(`/admin/credit/${app.id}/reject`, {}); } catch {}
+      setCreditList(prev => prev.map(x => x.id === app.id ? { ...x, status: 'rejected' } : x));
+      try { const all = JSON.parse(localStorage.getItem('credit:apps')||'[]').map(x => x.id===app.id?{...x, status:'rejected'}:x); localStorage.setItem('credit:apps', JSON.stringify(all)); } catch {}
+      const uid = await resolveUidByPhone(app.phone);
+      const uidKey = uid || app.phone || 'guest';
+      sendToBridge({ type: 'update_credit_app_status', id: app.id, phone: app.phone, amount: Number(app.amount||0), status: 'rejected' });
+      const title = '信用金审批未通过';
+      const body = `申请被拒绝，金额 MX$${Number(app.amount||0)}`;
+      sendToBridge({ type: 'add_notification', nid: uidKey, title, body });
+      alert('已拒绝');
+    } catch (e) { alert('操作失败: ' + (e?.message || e)); }
+    finally { setCreditApproving(false); }
+  };
+  const previewImages = (app, idx = 0) => {
+    const imgs = (Array.isArray(app.images)?app.images:[]).map(im => (im?.data || im));
+    if (!imgs.length) { alert('无材料'); return; }
+    setImgPreview({ open: true, imgs, index: Math.max(0, Math.min(idx, imgs.length-1)) });
+  };
 
   const openAddModal = () => {
     // 管理员仅能创建运营账号，且默认归属当前管理员
@@ -189,6 +340,7 @@ export default function Admin() {
       if (assignFilter && assignFilter !== 'all') sp.set('assigned', assignFilter);
       sp.set('page', String(usersPage));
       sp.set('pageSize', String(usersPageSize));
+      sp.set('includeBalances', '1');
       const data = await api.get(`/admin/users?${sp.toString()}`);
       setBackendUsers(data?.users || []);
       setUsersTotal(Number(data?.total || 0));
@@ -201,6 +353,7 @@ export default function Admin() {
           if (assignFilter && assignFilter !== 'all') sp.set('assigned', assignFilter);
           sp.set('page', String(usersPage));
           sp.set('pageSize', String(usersPageSize));
+          sp.set('includeBalances', '1');
           const data = await api.get(`/admin/users?${sp.toString()}`);
           setBackendUsers(data?.users || []);
           setUsersTotal(Number(data?.total || 0));
@@ -228,6 +381,8 @@ export default function Admin() {
         lastLoginIp: u.last_login_ip || null,
         assignedAdminId: u.assigned_admin_id || null,
         assignedOperatorId: u.assigned_operator_id || null,
+        credit_score: Number.isFinite(Number(u?.credit_score)) ? Number(u.credit_score) : null,
+        balances: (u.balances && typeof u.balances === 'object') ? u.balances : { MXN:0, USD:0, USDT:0 },
       }));
     const k = q.trim().toLowerCase();
     if (k) list = list.filter(u => (u.name || '').toLowerCase().includes(k) || (u.phone || '').includes(k));
@@ -255,6 +410,8 @@ export default function Admin() {
           lastLoginIp: u.last_login_ip || null,
           assignedAdminId: u.assigned_admin_id || null,
           assignedOperatorId: u.assigned_operator_id || null,
+          credit_score: Number.isFinite(Number(u?.credit_score)) ? Number(u.credit_score) : null,
+          balances: (u.balances && typeof u.balances === 'object') ? u.balances : { MXN:0, USD:0, USDT:0 },
         }));
       if (role === 'operator' && sid) list = list.filter(u => Number(u.assignedOperatorId||0) === sid);
       else if (role === 'admin' && sid) list = list.filter(u => Number(u.assignedAdminId||0) === sid);
@@ -858,6 +1015,7 @@ function PositionsPage({ session }) {
                 {session?.role !== 'operator' && (
                   <button className={`nav-item ${active === "funds-withdraws" ? "active" : ""}`} onClick={() => { setActive('funds-withdraws'); try { window.history.pushState(null, '', '/admin/withdraws'); } catch {} }}>用户提现</button>
                 )}
+                <button className={`nav-item ${active === "funds-credit" ? "active" : ""}`} onClick={() => setActive('funds-credit')}>信用金审核</button>
               </div>
             </details>
           </div>
@@ -921,6 +1079,7 @@ function PositionsPage({ session }) {
               active === "funds-recharge" ? "资金管理 / 账户充值" :
               active === "funds-logs" ? "资金管理 / 资金明细" :
               active === "funds-withdraws" ? "资金管理 / 用户提现" :
+              active === "funds-credit" ? "资金管理 / 信用金审核" :
               active === "settings-trading" ? "系统设置 / 交易时间限制" :
               "股票信息"
             }
@@ -1053,6 +1212,7 @@ function PositionsPage({ session }) {
                     <th style={{ padding: "8px 6px" }}>归属管理</th>
                     <th style={{ padding: "8px 6px" }}>登录IP</th>
                     <th style={{ padding: "8px 6px" }}>国家</th>
+                    <th style={{ padding: "8px 6px" }}>资金</th>
                     <th style={{ padding: "8px 6px" }}>操作</th>
                   </tr>
                 </thead>
@@ -1076,6 +1236,11 @@ function PositionsPage({ session }) {
                       </td>
                       <td style={{ padding: "8px 6px" }}>{u.lastLoginIp || '-'}</td>
                       <td style={{ padding: "8px 6px" }}>{u.country || '-'}</td>
+                      <td style={{ padding: "8px 6px" }}>
+                        <span className="chip" style={{ marginRight:6 }}>MXN {Number(u?.balances?.MXN||0).toFixed(2)}</span>
+                        <span className="chip" style={{ marginRight:6 }}>USD {Number(u?.balances?.USD||0).toFixed(2)}</span>
+                        <span className="chip">USDT {Number(u?.balances?.USDT||0).toFixed(2)}</span>
+                      </td>
                       <td style={{ padding: "8px 6px", position: 'relative' }}>
                         <div className="dropdown" style={{ display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
                           <button
@@ -1090,7 +1255,8 @@ function PositionsPage({ session }) {
                             <div className="menu" style={{ position: 'absolute', zIndex: 5, background: '#0f213a', border: '1px solid #263b5e', borderRadius: 6, padding: 6, minWidth: 140 }}>
                               <button className="btn slim" style={{ width: '100%' }} onClick={() => { setOpsOpenId(null); setSelectedUser(u); }}>详情</button>
                           <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'changePassword' }); }}>改登录密码</button>
-                          
+                              <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'creditScore' }); }}>修改信用评分</button>
+                              
                               <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => {
                                 if (!['admin','super'].includes(session?.role)) { alert('无权限'); return; }
                                 setOpsOpenId(null);
@@ -1134,7 +1300,7 @@ function PositionsPage({ session }) {
                 ))}
                   {customerList.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="desc" style={{ padding: "10px 6px" }}>暂无数据</td>
+                      <td colSpan={8} className="desc" style={{ padding: "10px 6px" }}>暂无数据</td>
                     </tr>
                   )}
                 </tbody>
@@ -1168,6 +1334,7 @@ function PositionsPage({ session }) {
                         <th style={{ padding: "8px 6px" }}>归属管理</th>
                         <th style={{ padding: "8px 6px" }}>登录IP</th>
                         <th style={{ padding: "8px 6px" }}>国家</th>
+                        <th style={{ padding: "8px 6px" }}>资金</th>
                         <th style={{ padding: "8px 6px" }}>操作</th>
                       </tr>
                     </thead>
@@ -1191,16 +1358,23 @@ function PositionsPage({ session }) {
                           </td>
                           <td style={{ padding: "8px 6px" }}>{u.lastLoginIp || '-'}</td>
                           <td style={{ padding: "8px 6px" }}>{u.country || '-'}</td>
+                          <td style={{ padding: "8px 6px" }}>
+                            <span className="chip" style={{ marginRight:6 }}>MXN {Number(u?.balances?.MXN||0).toFixed(2)}</span>
+                            <span className="chip" style={{ marginRight:6 }}>USD {Number(u?.balances?.USD||0).toFixed(2)}</span>
+                            <span className="chip">USDT {Number(u?.balances?.USDT||0).toFixed(2)}</span>
+                          </td>
                           <td style={{ padding: "8px 6px", position: 'relative' }}>
                             <div className="dropdown" style={{ display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
                               <button className="btn primary" style={{ height: 32 }} onClick={(e) => { e.stopPropagation(); setOpsOpenId((prev) => (prev === u.id ? null : u.id)); }}>操作 ▾</button>
-                              {opsOpenId === u.id && (
-                                <div className="menu" style={{ position: 'absolute', zIndex: 5, background: '#0f213a', border: '1px solid #263b5e', borderRadius: 6, padding: 6, minWidth: 140 }}>
-                                  <button className="btn slim" style={{ width: '100%' }} onClick={() => { setOpsOpenId(null); setSelectedUser(u); }}>详情</button>
-                                  <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'changePassword' }); }}>改登录密码</button>
+                          {opsOpenId === u.id && (
+                            <div className="menu" style={{ position: 'absolute', zIndex: 5, background: '#0f213a', border: '1px solid #263b5e', borderRadius: 6, padding: 6, minWidth: 140 }}>
+                              <button className="btn slim" style={{ width: '100%' }} onClick={() => { setOpsOpenId(null); setSelectedUser(u); }}>详情</button>
+                              <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'changePassword' }); }}>改登录密码</button>
+                                  <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'creditScore' }); }}>修改信用评分</button>
                                   {session?.role !== 'operator' && (
                                     <button className="btn slim" style={{ width: '100%', marginTop: 6 }} onClick={() => { setOpsOpenId(null); setSelectedUser({ ...u, action: 'funds' }); }}>修改账户资金</button>
                                   )}
+                            
                                 </div>
                               )}
                             </div>
@@ -1209,7 +1383,7 @@ function PositionsPage({ session }) {
                       ))}
                       {myCustomerList.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="desc" style={{ padding: "10px 6px" }}>暂无数据</td>
+                          <td colSpan={8} className="desc" style={{ padding: "10px 6px" }}>暂无数据</td>
                         </tr>
                       )}
                     </tbody>
@@ -1340,6 +1514,102 @@ function PositionsPage({ session }) {
           <AdminWithdraws embedded={true} />
         )}
 
+        {/* 资金管理：信用金审核 */}
+        {active === "funds-credit" && (
+          <div className="card flat">
+            <h1 className="title">信用金审核</h1>
+            <div className="form admin-form-compact" style={{ marginTop: 10 }}>
+              <label className="label">搜索</label>
+              <input className="input" placeholder={"输入姓名或手机号"} value={creditQ} onChange={e => setCreditQ(e.target.value)} />
+              <label className="label">状态</label>
+              <select className="input" value={creditStatus} onChange={e => setCreditStatus(e.target.value)}>
+                <option value="all">全部</option>
+                <option value="pending">待审核</option>
+                <option value="approved">已批准</option>
+                <option value="rejected">已拒绝</option>
+                <option value="done">已完成</option>
+              </select>
+              <div className="sub-actions" style={{ justifyContent:'flex-start', gap:8, marginTop:8 }}>
+                <button className="btn" onClick={() => { setCreditPage(1); refreshCreditApps(); }}>查询</button>
+                <button className="btn" onClick={() => { setCreditQ(''); setCreditStatus('all'); setCreditPage(1); refreshCreditApps(); }}>重置</button>
+              </div>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <table style={{ width: '100%', borderCollapse:'collapse' }}>
+                <thead>
+                  <tr style={{ textAlign:'left' }}>
+                    <th style={{ padding:'8px 6px' }}>姓名</th>
+                    <th style={{ padding:'8px 6px' }}>手机号</th>
+                    <th style={{ padding:'8px 6px' }}>地址</th>
+                    <th style={{ padding:'8px 6px' }}>金额(MXN)</th>
+                    <th style={{ padding:'8px 6px' }}>信用分</th>
+                    <th style={{ padding:'8px 6px' }}>状态</th>
+                    <th style={{ padding:'8px 6px' }}>提交时间</th>
+                    <th style={{ padding:'8px 6px' }}>申请期限</th>
+                    <th style={{ padding:'8px 6px' }}>图片</th>
+                    <th style={{ padding:'8px 6px' }}>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(creditList || []).map(app => (
+                    <tr key={app.id} style={{ borderTop:'1px solid #263b5e' }}>
+                      <td style={{ padding:'8px 6px' }}>{app.name}</td>
+                      <td style={{ padding:'8px 6px' }}>{app.phone}</td>
+                      <td style={{ padding:'8px 6px' }}>{app.address} {app.city} {app.state} {app.zip}</td>
+                      <td style={{ padding:'8px 6px' }}>{Number(app.amount||0)}</td>
+                      <td style={{ padding:'8px 6px' }}>{Number(app.score||0)}</td>
+                      <td style={{ padding:'8px 6px' }}>{String(app.status||'pending')}</td>
+                      <td style={{ padding:'8px 6px' }}>{new Date(app.ts||Date.now()).toLocaleString()}</td>
+                      <td style={{ padding:'8px 6px' }}>{Number(app.periodValue||0)}{String(app.periodUnit||'day')==='year'?'年':(String(app.periodUnit||'day')==='month'?'月':'天')}</td>
+                      <td style={{ padding:'8px 6px' }}>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                          {(Array.isArray(app.images)?app.images:[]).slice(0,4).map((im, idx) => (
+                            <img key={idx} src={im?.data || im} alt="proof" style={{ width:40, height:40, objectFit:'cover', borderRadius:6, border:'1px solid #263b5e', cursor:'pointer' }} onClick={()=>previewImages(app, idx)} />
+                          ))}
+                          {(!app.images || app.images.length===0) ? (<span className="desc">无</span>) : null}
+                        </div>
+                      </td>
+                      <td style={{ padding:'8px 6px' }}>
+                        {isSuper && String(app.status||'pending')==='pending' ? (
+                          <div style={{ display:'flex', gap:6 }}>
+                            <button className="btn primary" disabled={creditApproving} onClick={() => approveCredit(app)}>批准</button>
+                            <button className="btn" disabled={creditApproving} onClick={() => rejectCredit(app)}>拒绝</button>
+                          </div>
+                        ) : (
+                          <div className="desc">{String(app.status||'pending')==='done' ? '已完成' : (String(app.status||'pending')==='rejected' ? '已拒绝' : (isSuper?'待处理':'无审批权限'))}</div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {(creditList||[]).length===0 && (
+                    <tr><td className="desc" colSpan={10}>{creditApiSupported? '--' : '后端未提供接口，显示本地提交为空'}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {imgPreview.open && (
+              <div className="modal" style={{ display:'grid', placeItems:'center' }} onClick={()=>setImgPreview({ open:false, imgs:[], index:0 })}>
+                <div className="modal-card" style={{ maxWidth: 820, marginTop: 0 }} onClick={(e)=>e.stopPropagation()}>
+                  <h2 className="title" style={{ marginTop:0 }}>材料预览</h2>
+                  <div style={{ display:'grid', gap:10 }}>
+                    <img src={imgPreview.imgs[imgPreview.index]} alt="proof" style={{ width:'100%', maxHeight:540, objectFit:'contain', borderRadius:8, border:'1px solid #263b5e' }} />
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                      {imgPreview.imgs.map((u,i)=>(
+                        <img key={i} src={u} alt={`thumb-${i}`} style={{ width:64, height:64, objectFit:'cover', borderRadius:6, border: i===imgPreview.index ? '2px solid #4aa3ff':'1px solid #263b5e', cursor:'pointer' }} onClick={()=>setImgPreview(p=>({ ...p, index:i }))} />
+                      ))}
+                    </div>
+                    <div className="sub-actions" style={{ justifyContent:'flex-end', gap:8 }}>
+                      <button className="btn" onClick={()=>setImgPreview(p=>({ ...p, index: Math.max(0, p.index-1) }))}>上一张</button>
+                      <button className="btn" onClick={()=>setImgPreview(p=>({ ...p, index: Math.min(p.imgs.length-1, p.index+1) }))}>下一张</button>
+                      <button className="btn" onClick={()=>setImgPreview({ open:false, imgs:[], index:0 })}>关闭</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 系统设置：交易时间限制 */}
         {active === "settings-trading" && (
           <SettingsTrading />
@@ -1426,6 +1696,14 @@ function PositionsPage({ session }) {
                   </>
                 )}
 
+                {selectedUser.action === 'creditScore' && (
+                  <>
+                    <label className="label">信用评分</label>
+                    <input className="input" type="number" min={0} max={1000} value={String(selectedUser.credit_score ?? selectedUser.creditScore ?? '')}
+                      onChange={e => setSelectedUser(prev => ({ ...prev, credit_score: e.target.value }))} placeholder="0-1000" />
+                  </>
+                )}
+
                 <div className="sub-actions" style={{ justifyContent: "flex-end", gap: 10 }}>
                   <button className="btn" style={{ height: 36 }} onClick={closeDetails}>取消</button>
                   {selectedUser.action === 'changePassword' && <button className="btn primary" style={{ height: 36 }} onClick={onSavePassword}>保存</button>}
@@ -1452,6 +1730,16 @@ function PositionsPage({ session }) {
                       .catch(e => alert('更新失败: ' + (e?.message || e)));
                   }}>保存</button>}
                   {selectedUser.action === 'funds' && <button className="btn primary" style={{ height: 36 }} onClick={() => { if (!getToken()) { alert('请先登录后台'); return; } if (session?.role==='operator') { const sid = Number(session?.id||session?.userId||0); const oid = Number(selectedUser.assigned_operator_id || selectedUser.assignedOperatorId || 0); if (!sid || sid !== oid) { alert('该客户未归属到你，无法调整资金'); return; } } submitFunds(); }} disabled={submittingFunds}>{submittingFunds ? '提交中...' : '确认调整'}</button>}
+                  {selectedUser.action === 'creditScore' && <button className="btn primary" style={{ height: 36 }} onClick={() => {
+                    if (!getToken()) { alert('请先登录后台'); return; }
+                    const v = Number(selectedUser.credit_score ?? selectedUser.creditScore);
+                    if (!Number.isFinite(v)) { alert('请输入数字'); return; }
+                    const val = Math.max(0, Math.min(1000, Math.round(v)));
+                    if (session?.role==='operator') { const sid = Number(session?.id||session?.userId||0); const oid = Number(selectedUser.assigned_operator_id || selectedUser.assignedOperatorId || 0); if (!sid || sid !== oid) { alert('该客户未归属到你，无法修改信用评分'); return; } }
+                    api.post(`/admin/users/${selectedUser.id}/credit_score`, { score: val })
+                      .then(() => { alert('已更新信用评分'); setBackendUsers(prev => prev.map(u => u.id===selectedUser.id ? { ...u, credit_score: val } : u)); closeDetails(); })
+                      .catch(e => alert('更新失败: ' + (e?.message || e)));
+                  }}>保存</button>}
                   {selectedUser.action === 'delete' && <button className="btn primary" style={{ height: 36 }} onClick={() => {
                     if (!getToken()) { alert('请先登录后台'); return; }
                     if (session?.role==='operator') { const sid = Number(session?.id||session?.userId||0); const oid = Number(selectedUser.assigned_operator_id || selectedUser.assignedOperatorId || 0); if (!sid || sid !== oid) { alert('该客户未归属到你，无法删除'); return; } }
@@ -1786,7 +2074,7 @@ function VersionPanel() {
   return (
     <div className="ov-card" style={{ gridColumn: 'span 2' }}>
       <div className="ov-icon">🔎</div>
-      <div className="ov-title">版本状态： V {status?.api?.version || '1.0'}</div>
+      <div className="ov-title">版本状态： V {status?.api?.version || '1.0.1'}</div>
     </div>
   );
 }

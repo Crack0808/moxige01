@@ -86,18 +86,39 @@ export default function Profile() {
         const arr = Array.isArray(data?.balances) ? data.balances : [];
         const map = arr.reduce((m, r) => { m[String(r.currency).toUpperCase()] = Number(r.amount || 0); return m; }, {});
         if (stopped) return;
-        setFunds({
-          mxn: Number.isFinite(map.MXN) ? map.MXN : 0,
-          usd: Number.isFinite(map.USD) ? map.USD : 0,
-          usdt: Number.isFinite(map.USDT) ? map.USDT : 0,
-        });
+        try {
+          const sess = JSON.parse(localStorage.getItem('sessionUser')||'null');
+          const uid = sess?.id || sess?.phone || 'guest';
+          const holds = JSON.parse(localStorage.getItem(`withdraw:holds:${uid}`)||'[]');
+          const activeHolds = Array.isArray(holds)?holds.filter(h=>h.status==='active'):[];
+          const sumHold = (cur) => activeHolds.filter(h=>String(h.currency)===cur).reduce((s,h)=>s+Number(h.amount||0),0);
+          const debts = JSON.parse(localStorage.getItem('credit:debts')||'[]');
+          const activeDebts = Array.isArray(debts)?debts.filter(d=> (d.uid===uid || String(d.uid)===String(uid)) && d.status==='active'):[];
+          const sumDebtMXN = activeDebts.reduce((s,d)=>s+Number(d.amount||0),0);
+          setFunds({
+            mxn: (Number.isFinite(map.MXN) ? map.MXN : 0) + sumDebtMXN - sumHold('MXN'),
+            usd: (Number.isFinite(map.USD) ? map.USD : 0) - sumHold('USD'),
+            usdt: (Number.isFinite(map.USDT) ? map.USDT : 0) - sumHold('USDT'),
+          });
+        } catch {
+          setFunds({
+            mxn: Number.isFinite(map.MXN) ? map.MXN : 0,
+            usd: Number.isFinite(map.USD) ? map.USD : 0,
+            usdt: Number.isFinite(map.USDT) ? map.USDT : 0,
+          });
+        }
       } catch (_) {
         if (stopped) return;
         setFunds({ mxn: 0, usd: 0, usdt: 0 });
       } finally { if (!stopped) setLoading(false); }
     }
     fetchBalances();
-    return () => { stopped = true; };
+    const onHoldChanged = () => { fetchBalances(); };
+    try { window.addEventListener('withdraw_hold_changed', onHoldChanged); } catch {}
+    try { window.addEventListener('credit_debt_changed', onHoldChanged); } catch {}
+    const onStorage = (e) => { try { const k = String(e?.key||''); if (!k) { fetchBalances(); return; } if (k.startsWith('withdraw:holds') || k === 'credit:debts') fetchBalances(); } catch {} };
+    window.addEventListener('storage', onStorage);
+    return () => { stopped = true; try { window.removeEventListener('withdraw_hold_changed', onHoldChanged); } catch {}; try { window.removeEventListener('credit_debt_changed', onHoldChanged); } catch {}; try { window.removeEventListener('storage', onStorage); } catch {} };
   }, [session?.id, session?.backendId, session?.phone]);
 
   // 头像上传
@@ -222,6 +243,8 @@ export default function Profile() {
             <div className="icon-item" onClick={async ()=>{
               try {
                 const sess = (()=>{ try { return JSON.parse(localStorage.getItem('sessionUser')||'null'); } catch { return null; } })();
+                const blocked = (()=>{ try { const key = (sess?.id || sess?.phone || 'guest'); return !!localStorage.getItem(`inst:blocked:${key}`); } catch { return false; } })();
+                if (blocked) { alert(lang==='zh'?'你已丧失机构账户资格，如有疑问，请联系客服':(lang==='es'?'Has perdido la calificación institucional, contacta soporte':'You have lost institution qualification, please contact support')); return; }
                 if (sess && sess.assigned_operator_id != null) return nav('/me/institution');
                 const me = await api.get('/me');
                 const assigned = me?.user?.assigned_operator_id ?? null;
@@ -241,6 +264,7 @@ export default function Profile() {
         {/* 底部：广告位 + 退出登录 */}
         <div className="card borderless-card section-card">
           <div className="promo-block">{lang==='es'?'Espacio publicitario':'Promo Space'}</div>
+          <div className="desc" style={{ textAlign:'center', opacity:.8, margin:'8px 0' }}>V1.0.1</div>
           <div className="logout-area">
             <button className="btn logout-btn" onClick={async () => {
               try { await api.post('/auth/logout', {}); } catch {}

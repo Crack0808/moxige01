@@ -86,6 +86,38 @@ function getTDKey() {
       import.meta.env.VITE_TD_KEY_OVERRIDE;
     if (envKey) return envKey;
   } catch {}
+  // Server-injected window variable
+  try {
+    const w = typeof window !== 'undefined' ? window : undefined;
+    const k = w && w.__TD_KEY__ ? String(w.__TD_KEY__).trim() : '';
+    if (k) return k;
+  } catch {}
+  // Server-injected meta tag
+  try {
+    const m = typeof document !== 'undefined' ? document.querySelector('meta[name="td-key"]') : null;
+    const c = m && m.getAttribute('content') ? String(m.getAttribute('content')).trim() : '';
+    if (c) return c;
+  } catch {}
+  // Cookie
+  try {
+    const m = (typeof document !== 'undefined' ? document.cookie : '') || '';
+    const match = m.match(/(?:^|; )td_key=([^;]+)/);
+    const v = match ? decodeURIComponent(match[1]) : '';
+    if (v) return v;
+  } catch {}
+  // URL query param
+  try {
+    const loc = typeof window !== 'undefined' ? window.location : undefined;
+    const qs = loc && loc.search ? String(loc.search) : '';
+    if (qs) {
+      const p = new URLSearchParams(qs);
+      const v = String(p.get('tdkey') || '').trim();
+      if (v) {
+        try { localStorage.setItem('td:key', v); } catch {}
+        return v;
+      }
+    }
+  } catch {}
   // LocalStorage candidates
   try {
     const lsKey =

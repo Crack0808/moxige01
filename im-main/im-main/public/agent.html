@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>客服控制台</title>
+  <link rel="icon" href="/tiny.png" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body class="theme-dark">
@@ -394,22 +395,29 @@
         row.onclick = () => loadConversation(item.phone)
         listEl.appendChild(row)
       })
+      try { localStorage.setItem('im:conv', JSON.stringify(conversations)) } catch {}
     }
 
+    function loadCachedConversations() {
+      try {
+        const raw = localStorage.getItem('im:conv') || '[]'
+        const arr = JSON.parse(raw)
+        if (Array.isArray(arr) && arr.length) { conversations = arr; renderList(conversations) }
+      } catch {}
+    }
     async function refreshConversations() {
       try {
         const r = await fetch('/api/conversations')
         if (!r.ok) {
           if (r.status === 401) showTokenBar()
-          conversations = []
           renderList(conversations)
           return
         }
         const data = await r.json()
         conversations = Array.isArray(data) ? data : []
+        try { localStorage.setItem('im:conv', JSON.stringify(conversations)) } catch {}
         renderList(conversations)
       } catch (_) {
-        conversations = []
         renderList(conversations)
       }
     }
@@ -423,12 +431,15 @@
       if (user) {
         phoneEl.textContent = user.phone || ''
         nameEl.textContent = user.name || ''
-        avatarEl.src = user.avatar || ''
-        avatarEl.style.display = user.avatar ? 'block' : 'none'
+        avatarEl.onerror = () => { try { avatarEl.src = '/logo.png'; avatarEl.style.display = 'block' } catch {} }
+        avatarEl.src = user.avatar || '/logo.png'
+        avatarEl.style.display = 'block'
       } else {
         phoneEl.textContent = phone
         nameEl.textContent = ''
-        avatarEl.style.display = 'none'
+        avatarEl.onerror = () => { try { avatarEl.src = '/logo.png'; avatarEl.style.display = 'block' } catch {} }
+        avatarEl.src = '/logo.png'
+        avatarEl.style.display = 'block'
       }
       const note = await fetch('/api/note/' + encodeURIComponent(phone)).then(r => r.json())
       noteInput.value = ''
@@ -436,7 +447,7 @@
       renderNoteCards(notes)
       rbPhone.textContent = user && user.phone ? user.phone : phone
       rbName.textContent = user && user.name ? user.name : ''
-      rbCountry.textContent = user && user.country ? user.country : ''
+      rbCountry.textContent = (user && user.country && !/undefined/i.test(String(user.country))) ? user.country : ''
       rightbar.classList.remove('hidden')
       composerEl.classList.remove('hidden')
       const history = await fetch('/api/messages/' + encodeURIComponent(phone)).then(r => r.json())
@@ -702,7 +713,12 @@
       lightbox.classList.add('hidden')
     }
 
+    loadCachedConversations()
     refreshConversations()
+    const autoPhone = qs.get('phone') || ''
+    if (autoPhone) {
+      try { loadConversation(autoPhone) } catch {}
+    }
 
     function renderNoteCards(items) {
       noteCards.innerHTML = ''

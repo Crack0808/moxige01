@@ -3,7 +3,6 @@ import React from "react";
 import "./utils/tvGuard.js";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import App from "./App.jsx";
 import "./index.css";
 
 // 数据模型初始化：添加角色/归属字段，并内置一个超级管理员
@@ -64,12 +63,16 @@ try {
     try { localStorage.setItem('VITE_TD_KEY', tdKey); } catch {}
   }
 } catch {}
+try { if (import.meta.env && import.meta.env.VITE_APP_TITLE) { document.title = import.meta.env.VITE_APP_TITLE; } } catch {}
+import App from "./App.jsx";
+import AdminApp from "./AdminApp.jsx";
+const isAdmin = (() => { try { const p = window.location.pathname || ""; const port = String(window.location.port||""); return port === "5174" || /^\/admin(\/.*)?$/.test(p); } catch { return false; } })();
+const AppComp = isAdmin ? AdminApp : App;
 const rootElement = (
   <BrowserRouter>
-    <App />
+    <AppComp />
   </BrowserRouter>
 );
-
 ReactDOM.createRoot(document.getElementById("root")).render(
   import.meta.env.DEV ? rootElement : <React.StrictMode>{rootElement}</React.StrictMode>
 );
