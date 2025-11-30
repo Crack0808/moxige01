@@ -15,9 +15,9 @@ const DB_PATH = process.env.DB_PATH || '/app/data/app.db';
 const FALLBACK_DB_PATH = '/var/lib/docker/volumes/mxg-data/_data/app.db';
 const LOCAL_DB_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'data', 'app.db');
 const resolvedDbPath = (() => {
-  try { if (fs.existsSync(DB_PATH)) return DB_PATH; } catch {}
-  try { if (fs.existsSync(FALLBACK_DB_PATH)) return FALLBACK_DB_PATH; } catch {}
-  try { if (fs.existsSync(LOCAL_DB_PATH)) return LOCAL_DB_PATH; } catch {}
+  try { if (fs.existsSync(DB_PATH)) return DB_PATH; } catch { }
+  try { if (fs.existsSync(FALLBACK_DB_PATH)) return FALLBACK_DB_PATH; } catch { }
+  try { if (fs.existsSync(LOCAL_DB_PATH)) return LOCAL_DB_PATH; } catch { }
   return LOCAL_DB_PATH;
 })();
 try {
@@ -25,18 +25,18 @@ try {
   if (!fs.existsSync(dirEnsure)) {
     fs.mkdirSync(dirEnsure, { recursive: true });
   }
-} catch {}
+} catch { }
 // Enforce encrypted storage marker in production if required
 try {
   const REQUIRE_ENC = String(process.env.REQUIRE_ENCRYPTED_DB || '').trim() === '1';
   const IS_PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
   if (REQUIRE_ENC && IS_PROD) {
     const marker = String(process.env.DB_ENC_MARKER_FILE || '').trim() || path.join(path.dirname(resolvedDbPath), 'enc.ok');
-    if (!fs.existsSync(marker)) { try { console.error('[mxg-backend] encrypted DB marker not found:', marker); } catch {} ; process.exit(1); }
+    if (!fs.existsSync(marker)) { try { console.error('[mxg-backend] encrypted DB marker not found:', marker); } catch { }; process.exit(1); }
     const fieldKey = String(process.env.DB_FIELD_ENC_KEY || '').trim();
-    if (!fieldKey || fieldKey.length !== 64) { try { console.error('[mxg-backend] DB_FIELD_ENC_KEY (64-hex) required in production'); } catch {} ; process.exit(1); }
+    if (!fieldKey || fieldKey.length !== 64) { try { console.error('[mxg-backend] DB_FIELD_ENC_KEY (64-hex) required in production'); } catch { }; process.exit(1); }
   }
-} catch {}
+} catch { }
 // 若数据库不存在则初始化（创建表与默认数据）
 let needInit = false;
 try { needInit = !fs.existsSync(resolvedDbPath); } catch { needInit = false; }
@@ -61,10 +61,10 @@ function backupDatabaseFile() {
         const enc = Buffer.concat([cipher.update(data), cipher.final()]);
         const tag = cipher.getAuthTag();
         fs.writeFileSync(toEnc, Buffer.concat([iv, enc, tag]));
-        try { fs.unlinkSync(toPlain); } catch {}
+        try { fs.unlinkSync(toPlain); } catch { }
       }
-    } catch {}
-  } catch {}
+    } catch { }
+  } catch { }
 }
 
 // Frontend dist directory (served by backend for production domains)
@@ -72,7 +72,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FRONTEND_DIST = path.resolve(__dirname, 'moxige', 'dist');
 const UPLOADS_DIR = path.resolve(__dirname, 'data', 'uploads');
-try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch {}
+try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch { }
 
 function runMigrations() {
   db.pragma('journal_mode = WAL');
@@ -118,7 +118,7 @@ function runMigrations() {
     addCol('referral_code', 'TEXT');
     addCol('invited_by_user_id', 'INTEGER');
     addCol('credit_score', 'INTEGER');
-  } catch {}
+  } catch { }
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS institution_profile (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -130,7 +130,7 @@ function runMigrations() {
     const exists = db.prepare('SELECT id FROM institution_profile WHERE id = 1').get();
     if (!exists) db.prepare('INSERT INTO institution_profile (id, name, desc, avatar, updated_at) VALUES (1, ?, ?, ?, ?)')
       .run('Institution', 'Welcome to our institution. Trade responsibly.', '/logo.png', new Date().toISOString());
-  } catch {}
+  } catch { }
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS withdraw_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,7 +151,7 @@ function runMigrations() {
     );`);
     db.exec('CREATE INDEX IF NOT EXISTS idx_withdraw_user ON withdraw_orders(user_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_withdraw_status ON withdraw_orders(status)');
-  } catch {}
+  } catch { }
   // token 表
   db.exec(`CREATE TABLE IF NOT EXISTS tokens (
     token TEXT PRIMARY KEY,
@@ -161,7 +161,7 @@ function runMigrations() {
   );`);
   try {
     const tcols = db.prepare('PRAGMA table_info(tokens)').all().map(r => String(r.name))
-    if (!tcols.includes('token_hash')) { try { db.exec('ALTER TABLE tokens ADD COLUMN token_hash TEXT'); } catch {} }
+    if (!tcols.includes('token_hash')) { try { db.exec('ALTER TABLE tokens ADD COLUMN token_hash TEXT'); } catch { } }
     if (tcols.includes('token')) {
       try {
         db.exec('CREATE TABLE IF NOT EXISTS tokens_new (token_hash TEXT PRIMARY KEY, user_id INTEGER, exp INTEGER, created_at TEXT)');
@@ -171,9 +171,9 @@ function runMigrations() {
         tx(rows);
         db.exec('DROP TABLE tokens');
         db.exec('ALTER TABLE tokens_new RENAME TO tokens');
-      } catch {}
+      } catch { }
     }
-  } catch {}
+  } catch { }
   db.exec(`CREATE TABLE IF NOT EXISTS login_throttle (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     k TEXT,
@@ -305,7 +305,7 @@ function runMigrations() {
   try {
     const row = db.prepare('SELECT id FROM market_settings WHERE id = 1').get();
     if (!row) db.prepare('INSERT INTO market_settings (id, mx_enabled, us_enabled, mx_holidays, us_holidays, updated_at) VALUES (1, 1, 1, ?, ?, ?)').run('', '', new Date().toISOString());
-  } catch {}
+  } catch { }
 
   db.exec(`CREATE TABLE IF NOT EXISTS block_trade_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -322,7 +322,7 @@ function runMigrations() {
   );`);
   try {
     const cols = db.prepare('PRAGMA table_info(block_trade_orders)').all().map(r => String(r.name));
-    const addCol = (name, def) => { if (!cols.includes(name)) { try { db.exec(`ALTER TABLE block_trade_orders ADD COLUMN ${name} ${def};`); } catch {} } };
+    const addCol = (name, def) => { if (!cols.includes(name)) { try { db.exec(`ALTER TABLE block_trade_orders ADD COLUMN ${name} ${def};`); } catch { } } };
     addCol('approved_at', 'TEXT');
     addCol('lock_until', 'TEXT');
     addCol('locked', 'INTEGER');
@@ -331,40 +331,40 @@ function runMigrations() {
     addCol('profit', 'REAL');
     addCol('profit_pct', 'REAL');
     addCol('sold_at', 'TEXT');
-  } catch {}
-  try { db.exec("UPDATE block_trade_orders SET locked=1 WHERE status='approved' AND (locked IS NULL OR locked!=1)"); } catch {}
+  } catch { }
+  try { db.exec("UPDATE block_trade_orders SET locked=1 WHERE status='approved' AND (locked IS NULL OR locked!=1)"); } catch { }
   try {
     const colsP = db.prepare('PRAGMA table_info(positions)').all().map(r => String(r.name));
-    const addPosCol = (name, def) => { if (!colsP.includes(name)) { try { db.exec(`ALTER TABLE positions ADD COLUMN ${name} ${def};`); } catch {} } };
+    const addPosCol = (name, def) => { if (!colsP.includes(name)) { try { db.exec(`ALTER TABLE positions ADD COLUMN ${name} ${def};`); } catch { } } };
     addPosCol('long_avg', 'REAL');
     addPosCol('short_avg', 'REAL');
     addPosCol('locked', 'INTEGER');
-  } catch {}
+  } catch { }
 
-app.post('/api/admin/db/migrate', requireRoles(['super','admin']), (req, res) => {
-  try {
-    const cols = db.prepare('PRAGMA table_info(positions)').all().map(r => String(r.name));
-    const added = [];
-    const addCol = (name, def) => { if (!cols.includes(name)) { try { db.exec(`ALTER TABLE positions ADD COLUMN ${name} ${def};`); added.push(name); } catch {} } };
-    addCol('long_avg', 'REAL');
-    addCol('short_avg', 'REAL');
-    addCol('locked', 'INTEGER');
-    posColsCache = null;
-    const colsAfter = db.prepare('PRAGMA table_info(positions)').all().map(r => String(r.name));
-    res.json({ ok: true, added, cols: colsAfter });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
+  app.post('/api/admin/db/migrate', requireRoles(['super', 'admin']), (req, res) => {
+    try {
+      const cols = db.prepare('PRAGMA table_info(positions)').all().map(r => String(r.name));
+      const added = [];
+      const addCol = (name, def) => { if (!cols.includes(name)) { try { db.exec(`ALTER TABLE positions ADD COLUMN ${name} ${def};`); added.push(name); } catch { } } };
+      addCol('long_avg', 'REAL');
+      addCol('short_avg', 'REAL');
+      addCol('locked', 'INTEGER');
+      posColsCache = null;
+      const colsAfter = db.prepare('PRAGMA table_info(positions)').all().map(r => String(r.name));
+      res.json({ ok: true, added, cols: colsAfter });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
 
-app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => {
-  try {
-    const pos = db.prepare('PRAGMA table_info(positions)').all();
-    res.json({ ok: true, positions: pos });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
+  app.get('/api/admin/db/inspect', requireRoles(['super', 'admin']), (req, res) => {
+    try {
+      const pos = db.prepare('PRAGMA table_info(positions)').all();
+      res.json({ ok: true, positions: pos });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
 
   db.exec(`CREATE TABLE IF NOT EXISTS funds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -384,9 +384,9 @@ app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => 
 
   try {
     const colsF = db.prepare('PRAGMA table_info(funds)').all().map(r => String(r.name));
-    const addFundCol = (name, def) => { if (!colsF.includes(name)) { try { db.exec(`ALTER TABLE funds ADD COLUMN ${name} ${def};`); } catch {} } };
+    const addFundCol = (name, def) => { if (!colsF.includes(name)) { try { db.exec(`ALTER TABLE funds ADD COLUMN ${name} ${def};`); } catch { } } };
     addFundCol('currency', 'TEXT');
-  } catch {}
+  } catch { }
 
   db.exec(`CREATE TABLE IF NOT EXISTS fund_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -415,10 +415,10 @@ app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => 
   );`);
   try {
     const cols = db.prepare('PRAGMA table_info(notifications)').all().map(r => String(r.name));
-    const addCol = (name, def) => { if (!cols.includes(name)) { try { db.exec(`ALTER TABLE notifications ADD COLUMN ${name} ${def};`); } catch {} } };
+    const addCol = (name, def) => { if (!cols.includes(name)) { try { db.exec(`ALTER TABLE notifications ADD COLUMN ${name} ${def};`); } catch { } } };
     addCol('title', 'TEXT');
     addCol('pinned', 'INTEGER');
-  } catch {}
+  } catch { }
 
   db.exec(`CREATE TABLE IF NOT EXISTS ipo_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -440,13 +440,13 @@ app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => 
   );`);
   try {
     const colsI = db.prepare('PRAGMA table_info(ipo_items)').all().map(r => String(r.name));
-    const addColI = (name, def) => { if (!colsI.includes(name)) { try { db.exec(`ALTER TABLE ipo_items ADD COLUMN ${name} ${def};`); } catch {} } };
+    const addColI = (name, def) => { if (!colsI.includes(name)) { try { db.exec(`ALTER TABLE ipo_items ADD COLUMN ${name} ${def};`); } catch { } } };
     addColI('subscribe_end_at', 'TEXT');
     addColI('pair_address', 'TEXT');
     addColI('chain', 'TEXT');
     addColI('token_address', 'TEXT');
     addColI('currency', 'TEXT');
-  } catch {}
+  } catch { }
 
   db.exec(`CREATE TABLE IF NOT EXISTS ipo_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -466,7 +466,30 @@ app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => 
     db.exec('CREATE INDEX IF NOT EXISTS idx_block_trade_orders_user ON block_trade_orders(user_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_ipo_orders_user_status ON ipo_orders(user_id, status)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_ipo_items_released_code ON ipo_items(released, code)');
-  } catch {}
+  } catch { }
+
+  db.exec(`CREATE TABLE IF NOT EXISTS credit_apps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    name TEXT,
+    phone TEXT,
+    address TEXT,
+    city TEXT,
+    state TEXT,
+    zip TEXT,
+    amount REAL,
+    score INTEGER,
+    period_value INTEGER,
+    period_unit TEXT,
+    images TEXT,
+    status TEXT,
+    created_at TEXT,
+    updated_at TEXT
+  );`);
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_credit_apps_status ON credit_apps(status)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_credit_apps_user ON credit_apps(user_id)');
+  } catch { }
 
   // 种子：超级管理员（可用于后台登录验证与演示）
   const superExists = db.prepare('SELECT id FROM users WHERE phone = ?').get('0000000000');
@@ -499,7 +522,7 @@ app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => 
           .run('822888@account.local', hashPassword('822888'), 'Admin 822888', now, now, null, 'admin', '822888', null);
       }
     }
-  } catch {}
+  } catch { }
   // 用户加密钱包地址
   db.exec(`CREATE TABLE IF NOT EXISTS user_wallets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -522,7 +545,7 @@ app.get('/api/admin/db/inspect', requireRoles(['super','admin']), (req, res) => 
 }
 
 try { backupDatabaseFile(); runMigrations(); } catch (e) { console.error('[mxg-backend] migration failed:', e?.message || e); }
-try { setInterval(() => { try { db.prepare('DELETE FROM tokens WHERE exp IS NOT NULL AND exp < ?').run(Date.now()); } catch {} }, 60*60*1000); } catch {}
+try { setInterval(() => { try { db.prepare('DELETE FROM tokens WHERE exp IS NOT NULL AND exp < ?').run(Date.now()); } catch { } }, 60 * 60 * 1000); } catch { }
 function scheduleBackupCleanup() {
   try {
     const keepDays = Math.max(1, Number(process.env.DB_BACKUP_RETENTION_DAYS || 14));
@@ -534,20 +557,20 @@ function scheduleBackupCleanup() {
         const now = Date.now();
         for (const f of files) {
           const fp = path.join(dir, f);
-          try { const st = fs.statSync(fp); if (st.isFile() && (now - st.mtimeMs) > keepMs) fs.unlinkSync(fp); } catch {}
+          try { const st = fs.statSync(fp); if (st.isFile() && (now - st.mtimeMs) > keepMs) fs.unlinkSync(fp); } catch { }
         }
-      } catch {}
+      } catch { }
     };
     setInterval(run, 60 * 60 * 1000);
-  } catch {}
+  } catch { }
 }
-  try { scheduleBackupCleanup(); } catch {}
+try { scheduleBackupCleanup(); } catch { }
 
 const allowOrigins = String(process.env.CORS_ORIGIN || '').split(/[\s,]+/).filter(Boolean);
 const allowAllCors = allowOrigins.length === 0;
-  const PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
-  const ADMIN_OTP_REQUIRED = String(process.env.ADMIN_OTP_REQUIRED || (PROD ? '1' : '0')).trim() === '1';
-if (PROD && allowAllCors) { try { console.error('[mxg-backend] CORS_ORIGIN is required in production') } catch (e) {} ; process.exit(1); }
+const PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+const ADMIN_OTP_REQUIRED = String(process.env.ADMIN_OTP_REQUIRED || (PROD ? '1' : '0')).trim() === '1';
+if (PROD && allowAllCors) { try { console.error('[mxg-backend] CORS_ORIGIN is required in production') } catch (e) { }; process.exit(1); }
 app.use(cors({
   origin: (origin, cb) => {
     try {
@@ -562,7 +585,7 @@ app.use(cors({
   },
   credentials: true
 }));
-  app.use(bodyParser.json({ limit: '20mb' }));
+app.use(bodyParser.json({ limit: '20mb' }));
 const COOKIE_NAME = String(process.env.COOKIE_NAME || 'session_token');
 const COOKIE_DOMAIN = String(process.env.COOKIE_DOMAIN || '').trim();
 const COOKIE_SAMESITE = String(process.env.COOKIE_SAMESITE || (PROD ? 'Lax' : 'Lax')).trim();
@@ -575,17 +598,17 @@ function setSessionCookie(res, token) {
     if (COOKIE_DOMAIN) opts.domain = COOKIE_DOMAIN;
     const maxAgeMs = 30 * 24 * 3600 * 1000;
     res.cookie(COOKIE_NAME, token, { ...opts, maxAge: maxAgeMs });
-  } catch {}
+  } catch { }
 }
 function clearSessionCookie(res) {
   try {
     const opts = { httpOnly: true, sameSite: COOKIE_SAMESITE, secure: COOKIE_SECURE, path: '/' };
     if (COOKIE_DOMAIN) opts.domain = COOKIE_DOMAIN;
     res.cookie(COOKIE_NAME, '', { ...opts, maxAge: 0 });
-  } catch {}
+  } catch { }
 }
 function parseCookieHeader(h) {
-  const out = {}; try { String(h||'').split(';').forEach(p=>{ const i=p.indexOf('='); if(i>0){ const k=p.slice(0,i).trim(); const v=p.slice(i+1).trim(); out[k]=v; } }); } catch {}
+  const out = {}; try { String(h || '').split(';').forEach(p => { const i = p.indexOf('='); if (i > 0) { const k = p.slice(0, i).trim(); const v = p.slice(i + 1).trim(); out[k] = v; } }); } catch { }
   return out;
 }
 function setCsrfCookie(res) {
@@ -595,12 +618,12 @@ function setCsrfCookie(res) {
     if (COOKIE_DOMAIN) opts.domain = COOKIE_DOMAIN;
     const maxAgeMs = 30 * 24 * 3600 * 1000;
     res.cookie(CSRF_COOKIE_NAME, token, { ...opts, maxAge: maxAgeMs });
-  } catch {}
+  } catch { }
 }
 function csrfGuard(req, res, next) {
   try {
     const m = String(req.method || 'GET').toUpperCase();
-    if (!['POST','PUT','PATCH','DELETE'].includes(m)) return next();
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(m)) return next();
     const url = String(req.originalUrl || req.url || '');
     if (url.startsWith('/api/auth/')) return next();
     if (url.startsWith('/api/admin/login_account')) return next();
@@ -613,33 +636,34 @@ function csrfGuard(req, res, next) {
     return next();
   } catch { return res.status(403).json({ ok: false, error: 'csrf_invalid' }); }
 }
-app.use('/api', wrapForMethods(['POST','PUT','PATCH','DELETE'], csrfGuard));
+app.use('/api', wrapForMethods(['POST', 'PUT', 'PATCH', 'DELETE'], csrfGuard));
 function payloadGuard(req, res, next) {
   try {
-    const m = String(req.method||'GET').toUpperCase();
-    if (!['POST','PUT','PATCH','DELETE'].includes(m)) return next();
+    const m = String(req.method || 'GET').toUpperCase();
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(m)) return next();
     const b = req.body || {};
     const pathLower = String(req.originalUrl || req.url || '').toLowerCase();
     const isKycSubmit = pathLower.includes('/api/me/kyc/submit');
     const isAvatarUpload = pathLower.includes('/api/me/avatar');
+    const isCreditApply = pathLower.includes('/api/me/credit/apply');
     const isNewsWrite = pathLower.includes('/api/admin/news/create') || pathLower.includes('/api/admin/news/update') || pathLower.includes('/api/admin/news/upload_image') || pathLower.includes('/api/admin/institution/upload_image');
-    const maxStr = isKycSubmit ? (20 * 1024 * 1024) : (isAvatarUpload ? (6 * 1024 * 1024) : (isNewsWrite ? (2 * 1024 * 1024) : 256));
-    const limitStr = (s) => { s = String(s||''); if ((isKycSubmit || isAvatarUpload) && /^data:image\//i.test(s)) return s.length <= maxStr; return s.length <= maxStr; };
+    const maxStr = (isKycSubmit || isCreditApply) ? (20 * 1024 * 1024) : (isAvatarUpload ? (6 * 1024 * 1024) : (isNewsWrite ? (2 * 1024 * 1024) : 256));
+    const limitStr = (s) => { s = String(s || ''); if ((isKycSubmit || isAvatarUpload || isCreditApply) && /^data:image\//i.test(s)) return s.length <= maxStr; return s.length <= maxStr; };
     const limitNum = (n) => { n = Number(n); return Number.isFinite(n) && Math.abs(n) <= 1e12; };
     const limitArr = (a) => Array.isArray(a) ? a.length <= ((isKycSubmit || isAvatarUpload) ? 10 : 200) : true;
     const check = (v) => {
-      if (v==null) return true;
+      if (v == null) return true;
       if (typeof v === 'string') return limitStr(v);
       if (typeof v === 'number') return limitNum(v);
       if (Array.isArray(v)) { if (!limitArr(v)) return false; for (const x of v) { if (!check(x)) return false; } return true; }
       if (typeof v === 'object') { const keys = Object.keys(v); if (keys.length > 100) return false; for (const k of keys) { if (!limitStr(k) || !check(v[k])) return false; } return true; }
       return true;
     };
-    if (!check(b)) return res.status(400).json({ ok:false, error:'payload_invalid' });
+    if (!check(b)) return res.status(400).json({ ok: false, error: 'payload_invalid' });
     return next();
-  } catch { return res.status(400).json({ ok:false, error:'payload_invalid' }); }
+  } catch { return res.status(400).json({ ok: false, error: 'payload_invalid' }); }
 }
-app.use('/api/admin', wrapForMethods(['POST','PUT','PATCH','DELETE'], payloadGuard));
+app.use('/api/admin', wrapForMethods(['POST', 'PUT', 'PATCH', 'DELETE'], payloadGuard));
 app.use('/api/me', payloadGuard);
 function securityHeaders(req, res, next) {
   try {
@@ -659,17 +683,17 @@ function securityHeaders(req, res, next) {
         res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:");
       }
     }
-  } catch {}
+  } catch { }
   next();
 }
 app.use(securityHeaders);
 const rateBuckets = new Map();
 const REDIS_URL = String(process.env.REDIS_URL || '').trim();
-let redis = null; try { if (REDIS_URL) redis = new Redis(REDIS_URL); } catch {}
+let redis = null; try { if (REDIS_URL) redis = new Redis(REDIS_URL); } catch { }
 try {
   const REQUIRE_REDIS = String(process.env.REQUIRE_REDIS || '').trim() === '1';
-  if (PROD && REQUIRE_REDIS && !REDIS_URL) { try { console.error('[mxg-backend] REDIS_URL required in production'); } catch {} ; process.exit(1); }
-} catch {}
+  if (PROD && REQUIRE_REDIS && !REDIS_URL) { try { console.error('[mxg-backend] REDIS_URL required in production'); } catch { }; process.exit(1); }
+} catch { }
 function createRateLimiter(opts) {
   const windowMs = Math.max(1000, Number(opts?.windowMs || 60000));
   const max = Math.max(1, Number(opts?.max || 10));
@@ -708,42 +732,42 @@ function createUserWriteLimiter() {
   if (redis) {
     return async (req, res, next) => {
       try {
-        const m = String(req.method||'GET').toUpperCase();
-        if (!['POST','PUT','PATCH','DELETE'].includes(m)) return next();
+        const m = String(req.method || 'GET').toUpperCase();
+        if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(m)) return next();
         const uid = Number(req.user && req.user.id);
-        if (!Number.isFinite(uid) || uid<=0) return next();
+        if (!Number.isFinite(uid) || uid <= 0) return next();
         const key = `u:${uid}:w:rl`;
         const val = await redis.incr(key);
         if (val === 1) await redis.expire(key, 60);
-        if (val > 120) return res.status(429).json({ ok:false, error:'rate_limited' });
+        if (val > 120) return res.status(429).json({ ok: false, error: 'rate_limited' });
         return next();
       } catch { return next(); }
     };
   }
   return (req, res, next) => {
     try {
-      const m = String(req.method||'GET').toUpperCase();
-      if (!['POST','PUT','PATCH','DELETE'].includes(m)) return next();
+      const m = String(req.method || 'GET').toUpperCase();
+      if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(m)) return next();
       const uid = Number(req.user && req.user.id);
-      if (!Number.isFinite(uid) || uid<=0) return next();
-      const key = 'u:'+uid+':w';
+      if (!Number.isFinite(uid) || uid <= 0) return next();
+      const key = 'u:' + uid + ':w';
       const now = Date.now();
       const b = rateBuckets.get(key);
       if (!b || now > b.reset) { rateBuckets.set(key, { reset: now + 60000, count: 1 }); return next(); }
-      if (b.count >= 120) return res.status(429).json({ ok:false, error:'rate_limited' });
+      if (b.count >= 120) return res.status(429).json({ ok: false, error: 'rate_limited' });
       b.count += 1; return next();
     } catch { return next(); }
   };
 }
 const rateLimitUserWrite = createUserWriteLimiter();
-function getThrottleKeyForPhone(phone) { return `phone:${String(phone||'').trim()}`; }
-function getThrottleKeyForAccount(account) { return /^[0-9]{10}$/.test(String(account||'')) ? `phone:${String(account).trim()}` : `account:${String(account||'').trim()}`; }
+function getThrottleKeyForPhone(phone) { return `phone:${String(phone || '').trim()}`; }
+function getThrottleKeyForAccount(account) { return /^[0-9]{10}$/.test(String(account || '')) ? `phone:${String(account).trim()}` : `account:${String(account || '').trim()}`; }
 function checkLoginLocked(k, ip) {
   try {
     const row = db.prepare('SELECT fail_count, locked_until FROM login_throttle WHERE k = ? AND ip = ?').get(String(k), String(ip));
     if (!row) return { locked: false, remain: 0 };
     const now = Date.now();
-    if (Number(row.locked_until||0) > now) return { locked: true, remain: Number(row.locked_until)-now };
+    if (Number(row.locked_until || 0) > now) return { locked: true, remain: Number(row.locked_until) - now };
     return { locked: false, remain: 0 };
   } catch { return { locked: false, remain: 0 }; }
 }
@@ -753,17 +777,17 @@ function recordLoginFailure(k, ip, opts) {
     const r = db.prepare('SELECT fail_count FROM login_throttle WHERE k = ? AND ip = ?').get(String(k), String(ip));
     const prev = Number(r?.fail_count || 0) + 1;
     const limit = Math.max(1, Number(opts?.limit || 5));
-    const lockMs = Math.max(60000, Number(opts?.lockMs || 15*60*1000));
+    const lockMs = Math.max(60000, Number(opts?.lockMs || 15 * 60 * 1000));
     const lu = prev >= limit ? (now + lockMs) : 0;
     db.prepare(`INSERT INTO login_throttle (k, ip, fail_count, locked_until, updated_at) VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(k, ip) DO UPDATE SET fail_count=excluded.fail_count, locked_until=excluded.locked_until, updated_at=excluded.updated_at`).run(String(k), String(ip), prev, lu, new Date().toISOString());
-  } catch {}
+  } catch { }
 }
 function recordLoginSuccess(k, ip) {
   try {
     db.prepare(`INSERT INTO login_throttle (k, ip, fail_count, locked_until, updated_at) VALUES (?, ?, 0, 0, ?)
                ON CONFLICT(k, ip) DO UPDATE SET fail_count=0, locked_until=0, updated_at=excluded.updated_at`).run(String(k), String(ip), new Date().toISOString());
-  } catch {}
+  } catch { }
 }
 function adminAudit(req, res, next) {
   try {
@@ -773,7 +797,7 @@ function adminAudit(req, res, next) {
     const ip = xf || req.ip || (req.connection && req.connection.remoteAddress) || '';
     const mask = (obj) => {
       try {
-        const sens = new Set(['password','token','secret','apikey','apiKey','authorization']);
+        const sens = new Set(['password', 'token', 'secret', 'apikey', 'apiKey', 'authorization']);
         const walk = (v) => {
           if (v && typeof v === 'object') {
             const out = Array.isArray(v) ? [] : {};
@@ -791,18 +815,18 @@ function adminAudit(req, res, next) {
     const bodyStr = JSON.stringify(bodyMasked);
     db.prepare('INSERT INTO admin_audit (admin_id, method, path, ip, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(Number(req.user?.id || 0), String(req.method || ''), String(req.originalUrl || req.url || ''), String(ip), String(bodyStr || '').slice(0, 2000), now);
-  } catch {}
+  } catch { }
   next();
 }
-app.use('/api/admin', wrapForMethods(['POST','PATCH','DELETE'], rateLimitAdminWrite));
-app.use('/api/admin', wrapForMethods(['POST','PATCH','DELETE'], adminAudit));
+app.use('/api/admin', wrapForMethods(['POST', 'PATCH', 'DELETE'], rateLimitAdminWrite));
+app.use('/api/admin', wrapForMethods(['POST', 'PATCH', 'DELETE'], adminAudit));
 app.use('/api/me', rateLimitUserWrite);
 app.use((err, req, res, next) => {
   try {
     if (err && (err.type === 'entity.too.large' || err.status === 413)) {
       return res.status(413).json({ ok: false, error: 'payload_too_large', message: 'Image too large' });
     }
-  } catch {}
+  } catch { }
   next(err);
 });
 
@@ -895,27 +919,27 @@ function authOptional(req, _res, next) {
     const tk = hdr.replace(/^Bearer\s+/i, '').trim();
     if (tk) {
       let row = null;
-      try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token_hash = ?').get(sha256(tk)); } catch {}
-      if (!row) { try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token = ?').get(String(tk)); } catch {} }
+      try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token_hash = ?').get(sha256(tk)); } catch { }
+      if (!row) { try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token = ?').get(String(tk)); } catch { } }
       if (row && (!row.exp || Number(row.exp) >= Date.now())) {
         const user = db.prepare('SELECT id, phone, name, role FROM users WHERE id = ?').get(row.user_id);
         if (user) req.user = user;
       }
     }
-  } catch {}
+  } catch { }
   try {
     if (req.user && req.user.id) return next();
     const cookies = parseCookieHeader(req.headers && req.headers.cookie);
     const tk = String(cookies[COOKIE_NAME] || '').trim();
     if (!tk) return next();
-      let row = null;
-      try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token_hash = ?').get(sha256(tk)); } catch {}
-      if (!row) { try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token = ?').get(String(tk)); } catch {} }
+    let row = null;
+    try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token_hash = ?').get(sha256(tk)); } catch { }
+    if (!row) { try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token = ?').get(String(tk)); } catch { } }
     if (row && (!row.exp || Number(row.exp) >= Date.now())) {
       const user = db.prepare('SELECT id, phone, name, role FROM users WHERE id = ?').get(row.user_id);
       if (user) req.user = user;
     }
-  } catch {}
+  } catch { }
   next();
 }
 function requireAuth(req, res, next) {
@@ -925,22 +949,22 @@ function requireAuth(req, res, next) {
 
 function requireRoles(roles) {
   return (req, res, next) => {
-    try { console.log('[auth] hdr=', String(req.headers['authorization']||''), 'user=', req.user && req.user.id ? req.user.id : null) } catch {}
+    try { console.log('[auth] hdr=', String(req.headers['authorization'] || ''), 'user=', req.user && req.user.id ? req.user.id : null) } catch { }
     if (!req.user || !req.user.id) {
       try {
         const hdr = String(req.headers['authorization'] || '');
         const tk = hdr.replace(/^Bearer\s+/i, '').trim();
-        try { console.log('[auth] tk_len=', tk.length); } catch {}
+        try { console.log('[auth] tk_len=', tk.length); } catch { }
         if (tk) {
-          try { const _h = sha256(tk); const _r = db.prepare('SELECT token, user_id, exp FROM tokens WHERE token_hash = ?').get(_h); console.log('[auth] token_hash_found=', !!_r, 'uid=', _r && _r.user_id, 'exp=', _r && _r.exp); } catch {}
+          try { const _h = sha256(tk); const _r = db.prepare('SELECT token, user_id, exp FROM tokens WHERE token_hash = ?').get(_h); console.log('[auth] token_hash_found=', !!_r, 'uid=', _r && _r.user_id, 'exp=', _r && _r.exp); } catch { }
           let row = null;
-      try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token_hash = ?').get(sha256(tk)); } catch {}
-      if (!row) { try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token = ?').get(String(tk)); } catch {} }
-          if (row && (!row.exp || Number(row.exp) >= Date.now())) { try { const user = db.prepare('SELECT id, phone, name, role FROM users WHERE id = ?').get(row.user_id); console.log('[auth] user_found=', !!user, 'role=', user && user.role); if (user) req.user = user; } catch {} }
+          try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token_hash = ?').get(sha256(tk)); } catch { }
+          if (!row) { try { row = db.prepare('SELECT user_id, exp FROM tokens WHERE token = ?').get(String(tk)); } catch { } }
+          if (row && (!row.exp || Number(row.exp) >= Date.now())) { try { const user = db.prepare('SELECT id, phone, name, role FROM users WHERE id = ?').get(row.user_id); console.log('[auth] user_found=', !!user, 'role=', user && user.role); if (user) req.user = user; } catch { } }
         }
-      } catch {}
+      } catch { }
     }
-    try { console.log('[auth] after-parse user=', req.user && req.user.id ? req.user.id : null, 'role=', req.user && req.user.role) } catch {}
+    try { console.log('[auth] after-parse user=', req.user && req.user.id ? req.user.id : null, 'role=', req.user && req.user.role) } catch { }
     if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const ok = Array.isArray(roles) ? roles.includes(String(req.user.role)) : String(req.user.role) === String(roles);
     if (!ok) return res.status(403).json({ ok: false, error: 'Forbidden' });
@@ -949,7 +973,7 @@ function requireRoles(roles) {
 }
 
 function adminReadRoles() {
-  return ['super','admin','operator'];
+  return ['super', 'admin', 'operator'];
 }
 
 function wrapForMethods(methods, mw) {
@@ -966,13 +990,13 @@ app.use(authOptional);
 // 健康检查：容器健康探针与负载均衡可用
 app.get('/api/health', (req, res) => {
   let connected = false;
-  try { db.prepare('SELECT 1').get(); connected = true; } catch {}
+  try { db.prepare('SELECT 1').get(); connected = true; } catch { }
   res.json({ ok: true, status: 'healthy', db: { path: resolvedDbPath, connected } });
 });
 
 app.get('/api/version', (req, res) => {
   let connected = false;
-  try { db.prepare('SELECT 1').get(); connected = true; } catch {}
+  try { db.prepare('SELECT 1').get(); connected = true; } catch { }
   res.json({ ok: true, name: 'mxg-backend', version: '1.0.1', port: PORT, db: { path: resolvedDbPath, connected } });
 });
 
@@ -999,7 +1023,7 @@ app.get('/api/me', requireAuth, (req, res) => {
     try {
       const usd = db.prepare('SELECT amount FROM balances WHERE user_id = ? AND currency = ?').get(Number(req.user.id), 'USD')?.amount || 0;
       if (Number(usd) < 0) reason = 'USD negative';
-    } catch {}
+    } catch { }
     const trade_disabled = Number(row.disallow_trading || 0) === 1 || !!reason;
     res.json({ ok: true, user: { id: row.id, phone: row.phone, name: row.name, role: row.role, account: row.account, avatar: row.avatar, avatar_mime: row.avatar_mime, avatar_updated_at: row.avatar_updated_at, assigned_operator_id: row.assigned_operator_id ?? null, assigned_admin_id: row.assigned_admin_id ?? null, referral_code: row.referral_code || null, invited_by_user_id: row.invited_by_user_id ?? null, trade_disabled, reason: trade_disabled ? (reason || 'disabled') : '' } });
   } catch (e) {
@@ -1038,18 +1062,18 @@ app.get('/api/news/mx', async (req, res) => {
       const link = pick('link')
       const desc = pick('description')
       const pubDate = pick('pubDate')
-      let img = attr('enclosure','url') || attr('media:content','url') || attr('media:thumbnail','url')
+      let img = attr('enclosure', 'url') || attr('media:content', 'url') || attr('media:thumbnail', 'url')
       if (!img) img = 'https://picsum.photos/seed/' + encodeURIComponent(title || link) + '/600/400'
       items.push({ title, link, desc, pubDate, img })
     }
     const kw = /(bolsa|mercados|mercado|inversión|finanzas|BMV|IPC|acciones|divisas|bonos|tasas|ganancias|pérdidas|trimestrales|resultado|emisión|capital|volumen|cotización|apertura|cierre)/i
-    items = items.filter(it => kw.test(String(it.title||'')) || kw.test(String(it.desc||'')))
+    items = items.filter(it => kw.test(String(it.title || '')) || kw.test(String(it.desc || '')))
     for (let i = 0; i < Math.min(items.length, 20); i++) {
       try {
         const it = items[i]
         if (!it || !it.link) continue
-        if (it.img && !/picsum\.photos/.test(String(it.img||''))) continue
-        const dimg = String(it.desc||'').match(/<img[^>]*src=["']([^"']+)["']/i)
+        if (it.img && !/picsum\.photos/.test(String(it.img || ''))) continue
+        const dimg = String(it.desc || '').match(/<img[^>]*src=["']([^"']+)["']/i)
         if (dimg && dimg[1]) { it.img = dimg[1]; continue }
         const ac = new AbortController()
         const t = setTimeout(() => ac.abort(), 1500)
@@ -1057,14 +1081,14 @@ app.get('/api/news/mx', async (req, res) => {
         try {
           const resp = await fetch(it.link, { signal: ac.signal, headers: { 'User-Agent': 'Mozilla/5.0' } })
           html = await resp.text()
-        } catch {}
+        } catch { }
         clearTimeout(t)
         if (html) {
           const mOg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-                      || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+            || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
           if (mOg && mOg[1]) { items[i].img = mOg[1] }
         }
-      } catch {}
+      } catch { }
     }
     if (!items.length) {
       items = [
@@ -1096,22 +1120,22 @@ app.get('/api/news/feed', async (req, res) => {
     const market = String(req.query.market || 'us').trim().toLowerCase()
     try {
       db.exec('CREATE TABLE IF NOT EXISTS news_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, pub_date TEXT, intro TEXT, content TEXT, img TEXT, pinned INTEGER DEFAULT 0, author_id INTEGER, created_at TEXT, updated_at TEXT)')
-    } catch {}
+    } catch { }
     try {
       const rows = db.prepare('SELECT id, title, pub_date, intro, content, img FROM news_posts ORDER BY pinned DESC, pub_date DESC, id DESC').all()
       if (Array.isArray(rows) && rows.length) {
         const items = rows.map(r => ({
-          id: Number(r.id||0),
-          title: String(r.title||''),
+          id: Number(r.id || 0),
+          title: String(r.title || ''),
           link: '',
-          desc: String(r.intro||r.content||''),
-          content: String(r.content||''),
-          pubDate: String(r.pub_date||new Date().toUTCString()),
-          img: String(r.img||'')
+          desc: String(r.intro || r.content || ''),
+          content: String(r.content || ''),
+          pubDate: String(r.pub_date || new Date().toUTCString()),
+          img: String(r.img || '')
         }))
         return res.json({ items })
       }
-    } catch {}
+    } catch { }
     const key = 'feed:' + market
     const ttl = Math.max(60000, Number(req.query.ttl || 300000))
     const now = Date.now()
@@ -1140,7 +1164,7 @@ app.get('/api/news/feed', async (req, res) => {
           source: String(x.source || ''),
           related: String(x.related || ''),
         }))
-      } catch {}
+      } catch { }
       const kw = /(stock|equity|market|bolsa|mercados|mercado|invest|inversión|finanzas|BMV|IPC|acciones|forex|crypto|bitcoin|ethereum|bonos|tasas)/i
       items = items.filter(it => kw.test(it.title) || kw.test(it.desc) || kw.test(it.source) || kw.test(it.related))
       if (items.length) { feedCache.set(key, { ts: now, items }); return res.json({ items }) }
@@ -1151,7 +1175,7 @@ app.get('/api/news/feed', async (req, res) => {
       const r = await fetch(url)
       const j = await r.json()
       fallback = Array.isArray(j.items) ? j.items : []
-    } catch {}
+    } catch { }
     feedCache.set(key, { ts: now, items: fallback })
     return res.json({ items: fallback })
   } catch (e) { return res.json({ items: [] }) }
@@ -1161,88 +1185,88 @@ app.get('/api/news/feed', async (req, res) => {
 app.get('/api/news/get', (req, res) => {
   try {
     const id = Number(req.query.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' });
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' });
     const r = db.prepare('SELECT id, title, pub_date, intro, content, img, pinned, author_id, created_at, updated_at FROM news_posts WHERE id = ?').get(id);
-    if (!r) return res.status(404).json({ ok:false, error:'not found' });
-    res.json({ ok:true, item: r });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    if (!r) return res.status(404).json({ ok: false, error: 'not found' });
+    res.json({ ok: true, item: r });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // ---- Admin: News content management ----
-try { db.exec('CREATE TABLE IF NOT EXISTS news_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, pub_date TEXT, intro TEXT, content TEXT, img TEXT, pinned INTEGER DEFAULT 0, author_id INTEGER, created_at TEXT, updated_at TEXT)') } catch {}
+try { db.exec('CREATE TABLE IF NOT EXISTS news_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, pub_date TEXT, intro TEXT, content TEXT, img TEXT, pinned INTEGER DEFAULT 0, author_id INTEGER, created_at TEXT, updated_at TEXT)') } catch { }
 
 app.get('/api/admin/news/list', requireRoles(adminReadRoles()), (req, res) => {
   try {
     const rows = db.prepare('SELECT id, title, pub_date, intro, content, img, pinned, author_id, created_at, updated_at FROM news_posts ORDER BY pinned DESC, pub_date DESC, id DESC').all()
     res.json({ items: rows })
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message||e) }) }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }) }
 })
-app.post('/api/admin/news/create', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/news/create', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { title, pubDate, intro, content, img } = req.body || {}
-    if (!title) return res.status(400).json({ ok:false, error:'title required' })
+    if (!title) return res.status(400).json({ ok: false, error: 'title required' })
     const now = new Date().toISOString()
     const r = db.prepare('INSERT INTO news_posts (title, pub_date, intro, content, img, pinned, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)')
-      .run(String(title), String(pubDate||now), String(intro||''), String(content||''), String(img||''), Number(req.user.id||0), now, now)
+      .run(String(title), String(pubDate || now), String(intro || ''), String(content || ''), String(img || ''), Number(req.user.id || 0), now, now)
     const row = db.prepare('SELECT id, title, pub_date, intro, content, img, pinned, author_id, created_at, updated_at FROM news_posts WHERE id = ?').get(r.lastInsertRowid)
-    res.json({ ok:true, item: row })
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }) }
+    res.json({ ok: true, item: row })
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }) }
 })
-app.post('/api/admin/news/update/:id', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/news/update/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id)
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' })
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' })
     const { title, pubDate, intro, content, img } = req.body || {}
     const now = new Date().toISOString()
     db.prepare('UPDATE news_posts SET title=?, pub_date=?, intro=?, content=?, img=?, updated_at=? WHERE id=?')
-      .run(String(title||''), String(pubDate||now), String(intro||''), String(content||''), String(img||''), now, id)
+      .run(String(title || ''), String(pubDate || now), String(intro || ''), String(content || ''), String(img || ''), now, id)
     const row = db.prepare('SELECT id, title, pub_date, intro, content, img, pinned, author_id, created_at, updated_at FROM news_posts WHERE id = ?').get(id)
-    res.json({ ok:true, item: row })
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }) }
+    res.json({ ok: true, item: row })
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }) }
 })
-app.post('/api/admin/news/delete/:id', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/news/delete/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id)
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' })
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' })
     db.prepare('DELETE FROM news_posts WHERE id = ?').run(id)
-    res.json({ ok:true })
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }) }
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }) }
 })
-app.post('/api/admin/news/pin/:id', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/news/pin/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id)
     const pinned = Number((req.body && req.body.pinned) ? 1 : 0)
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' })
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' })
     db.prepare('UPDATE news_posts SET pinned=? WHERE id=?').run(pinned, id)
     const row = db.prepare('SELECT id, title, pub_date, intro, content, img, pinned FROM news_posts WHERE id=?').get(id)
-    res.json({ ok:true, item: row })
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }) }
+    res.json({ ok: true, item: row })
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }) }
 })
 
 // ---- Admin: News image upload (base64 dataUrl) ----
-app.post('/api/admin/news/upload_image', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/news/upload_image', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { data, dataUrl, mime: mimeHint } = req.body || {}
     const raw = typeof data === 'string' && data ? data : (typeof dataUrl === 'string' ? dataUrl : '')
-    if (!raw || raw.length < 48) return res.status(400).json({ ok:false, error: 'invalid image data' })
+    if (!raw || raw.length < 48) return res.status(400).json({ ok: false, error: 'invalid image data' })
     const m = raw.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i)
     const mime = (m ? m[1] : String(mimeHint || '').toLowerCase()) || 'image/png'
     const b64 = m ? m[3] : raw.replace(/^data:[^,]*,/, '')
     let buf
-    try { buf = Buffer.from(b64, 'base64') } catch { return res.status(400).json({ ok:false, error: 'bad base64' }) }
-    if (!buf || buf.length === 0) return res.status(400).json({ ok:false, error: 'empty data' })
-    if (buf.length > 8 * 1024 * 1024) return res.status(413).json({ ok:false, error: 'too large' })
+    try { buf = Buffer.from(b64, 'base64') } catch { return res.status(400).json({ ok: false, error: 'bad base64' }) }
+    if (!buf || buf.length === 0) return res.status(400).json({ ok: false, error: 'empty data' })
+    if (buf.length > 8 * 1024 * 1024) return res.status(413).json({ ok: false, error: 'too large' })
     const ext = mime.includes('png') ? '.png' : (mime.includes('webp') ? '.webp' : '.jpg')
     const d = new Date()
-    const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`
     const newsDir = path.join(UPLOADS_DIR, 'news')
-    try { fs.mkdirSync(newsDir, { recursive: true }) } catch {}
+    try { fs.mkdirSync(newsDir, { recursive: true }) } catch { }
     const filename = `news_${stamp}${ext}`
     const filePath = path.join(newsDir, filename)
     fs.writeFileSync(filePath, buf)
     const url = `/uploads/news/${filename}`
-    res.json({ ok:true, url })
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message||e) }) }
+    res.json({ ok: true, url })
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }) }
 })
 
 // 前端资产校验：用于发布后核对 index.html 与 assets 哈希是否一致
@@ -1255,12 +1279,12 @@ app.get('/api/dev/assets', (req, res) => {
     const assets = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir).filter(n => /\.(js|css)$/.test(n)) : [];
     let indexHtml = '';
     if (existsIndex) {
-      try { indexHtml = fs.readFileSync(indexPath, 'utf8'); } catch {}
+      try { indexHtml = fs.readFileSync(indexPath, 'utf8'); } catch { }
     }
     const referenced = [];
     if (indexHtml) {
-      const jsMatches = [...indexHtml.matchAll(/assets\/[^"]+\.js/g)].map(m => m[0].replace('assets/',''));
-      const cssMatches = [...indexHtml.matchAll(/assets\/[^"]+\.css/g)].map(m => m[0].replace('assets/',''));
+      const jsMatches = [...indexHtml.matchAll(/assets\/[^"]+\.js/g)].map(m => m[0].replace('assets/', ''));
+      const cssMatches = [...indexHtml.matchAll(/assets\/[^"]+\.css/g)].map(m => m[0].replace('assets/', ''));
       for (const f of [...jsMatches, ...cssMatches]) referenced.push(f);
     }
     const refsUnique = Array.from(new Set(referenced));
@@ -1275,7 +1299,7 @@ app.get('/api/dev/seed', (req, res) => {
   try {
     const DEV = String(process.env.NODE_ENV || '').trim().toLowerCase() !== 'production';
     const ALLOW = String(process.env.ENABLE_DEV_SEED || '').trim() === '1';
-    if (!DEV || !ALLOW) return res.status(403).json({ ok:false, error:'dev_seed_disabled' });
+    if (!DEV || !ALLOW) return res.status(403).json({ ok: false, error: 'dev_seed_disabled' });
     const now = new Date().toISOString();
     let admin = db.prepare("SELECT id, account FROM users WHERE account = ? AND role = 'admin'").get('admin');
     if (!admin) {
@@ -1289,7 +1313,7 @@ app.get('/api/dev/seed', (req, res) => {
         .run('yisen01@account.local', hashPassword('yisen01'), 'Operator yisen01', now, now, null, 'operator', 'yisen01', Number(admin.id));
       operator = { id: info.lastInsertRowid, account: 'yisen01' };
     }
-    try { db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hashPassword('yisen01'), now, Number(operator.id)); } catch {}
+    try { db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hashPassword('yisen01'), now, Number(operator.id)); } catch { }
     try {
       const cur = db.prepare('SELECT invite_code FROM users WHERE id = ?').get(Number(operator.id))?.invite_code || '';
       if (!cur) {
@@ -1303,7 +1327,7 @@ app.get('/api/dev/seed', (req, res) => {
         } while (tries < 5);
         db.prepare('UPDATE users SET invite_code=?, updated_at=? WHERE id=?').run(code, now, Number(operator.id));
       }
-    } catch {}
+    } catch { }
     let user = db.prepare("SELECT id, phone FROM users WHERE phone = ? AND role = 'customer'").get('1111111111');
     if (!user) {
       const info = db.prepare('INSERT INTO users (email, password_hash, name, created_at, updated_at, phone, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
@@ -1317,19 +1341,19 @@ app.get('/api/dev/seed', (req, res) => {
       db.prepare('UPDATE users SET assigned_operator_id=?, assigned_admin_id=?, updated_at=? WHERE id=?')
         .run(Number(operator.id), aid, now, Number(user.id));
     }
-    try { db.prepare('INSERT INTO balances (user_id, currency, amount, updated_at) VALUES (?, ?, ?, ?)').run(Number(user.id), 'USD', 1234.56, now); } catch {}
+    try { db.prepare('INSERT INTO balances (user_id, currency, amount, updated_at) VALUES (?, ?, ?, ?)').run(Number(user.id), 'USD', 1234.56, now); } catch { }
     try {
       db.prepare('INSERT OR IGNORE INTO positions (user_id, symbol, market, long_qty, short_qty, avg_price, long_avg, short_avg, locked, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .run(Number(user.id), 'AAPL', 'NASDAQ', 10, 0, 180.12, 180.12, 0, 0, now, now);
-    } catch {}
+    } catch { }
     try {
       db.prepare('INSERT INTO block_trade_orders (user_id, symbol, market, side, price, qty, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .run(Number(user.id), 'TSLA', 'NASDAQ', 'BUY', 250.5, 5, 'completed', now, now);
-    } catch {}
+    } catch { }
     try {
       db.prepare('INSERT INTO fund_orders (user_id, fund_code, side, price, qty, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .run(Number(user.id), 'FND123', 'BUY', 10.0, 100, 'completed', now, now);
-    } catch {}
+    } catch { }
     try {
       let ipo = db.prepare('SELECT id FROM ipo_items WHERE code = ?').get('IPOXG');
       if (!ipo) {
@@ -1339,14 +1363,14 @@ app.get('/api/dev/seed', (req, res) => {
       }
       db.prepare('INSERT INTO ipo_orders (user_id, ipo_id, code, price, qty, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .run(Number(user.id), Number(ipo.id), 'IPOXG', 20.0, 50, 'approved', now, now);
-    } catch {}
+    } catch { }
     try {
       db.exec('CREATE TABLE IF NOT EXISTS balance_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, currency TEXT, amount REAL, reason TEXT, admin_id INTEGER, created_at TEXT)');
       db.prepare('INSERT INTO balance_logs (user_id, currency, amount, reason, admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(Number(user.id), 'USD', 200, 'dev_seed', Number(admin.id), now);
-    } catch {}
-    res.json({ ok:true, admin, operator, user });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    } catch { }
+    res.json({ ok: true, admin, operator, user });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 app.post('/api/auth/register_phone', (req, res) => {
@@ -1370,18 +1394,18 @@ app.post('/api/auth/login_phone', rateLimitLogin, (req, res) => {
   const ip = getClientIp(req);
   const lock = checkLoginLocked(getThrottleKeyForPhone(phone), ip);
   if (lock.locked) {
-    if (!PROD) { try { recordLoginSuccess(getThrottleKeyForPhone(phone), ip); } catch {} }
+    if (!PROD) { try { recordLoginSuccess(getThrottleKeyForPhone(phone), ip); } catch { } }
     else return res.status(429).json({ ok: false, error: 'login_locked', remainMs: Number(lock.remain || 0) });
   }
   const row = db.prepare('SELECT id, phone, name, role, password_hash FROM users WHERE phone = ?').get(String(phone));
   if (!row) return res.status(401).json({ ok: false, error: 'wrong phone or password' });
   const ok = verifyPassword(password, row.password_hash);
   const LIMIT = PROD ? 5 : 99;
-  const LOCK_MS = PROD ? 15*60*1000 : 60*1000;
+  const LOCK_MS = PROD ? 15 * 60 * 1000 : 60 * 1000;
   if (!ok) { recordLoginFailure(getThrottleKeyForPhone(phone), ip, { limit: LIMIT, lockMs: LOCK_MS }); return res.status(401).json({ ok: false, error: 'wrong phone or password' }); }
   if (String(row.role) !== 'customer') return res.status(403).json({ ok: false, error: 'forbidden role' });
   // 兼容旧库：若为旧哈希，透明升级为 bcrypt
-  try { if (!isBcryptHash(row.password_hash)) db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hashPassword(password), new Date().toISOString(), row.id); } catch {}
+  try { if (!isBcryptHash(row.password_hash)) db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hashPassword(password), new Date().toISOString(), row.id); } catch { }
   // 生成令牌（48位十六进制）并写入 tokens 表，有效期30天
   const token = issueTokenForUser(row.id);
   // 记录最近登录 IP
@@ -1389,9 +1413,9 @@ app.post('/api/auth/login_phone', rateLimitLogin, (req, res) => {
     recordLoginSuccess(getThrottleKeyForPhone(phone), ip);
     const country = getCountryFromHeaders(req);
     db.prepare('UPDATE users SET last_login_ip=?, last_login_country=?, updated_at=? WHERE id=?').run(encField(ip), country || null, new Date().toISOString(), row.id);
-  } catch {}
-  try { setSessionCookie(res, token); } catch {}
-  try { setCsrfCookie(res); } catch {}
+  } catch { }
+  try { setSessionCookie(res, token); } catch { }
+  try { setCsrfCookie(res); } catch { }
   res.json({ ok: true, token, user: { id: row.id, phone: row.phone, role: row.role, name: row.name } });
 });
 
@@ -1404,7 +1428,7 @@ app.post('/api/auth/login_account', rateLimitLogin, (req, res) => {
   const ip = getClientIp(req);
   const lock = checkLoginLocked(getThrottleKeyForAccount(acc), ip);
   if (lock.locked) {
-    if (!PROD) { try { recordLoginSuccess(getThrottleKeyForAccount(acc), ip); } catch {} }
+    if (!PROD) { try { recordLoginSuccess(getThrottleKeyForAccount(acc), ip); } catch { } }
     else return res.status(429).json({ ok: false, error: 'login_locked', remainMs: Number(lock.remain || 0) });
   }
   const row = isPhone
@@ -1413,9 +1437,9 @@ app.post('/api/auth/login_account', rateLimitLogin, (req, res) => {
   if (!row) return res.status(401).json({ ok: false, error: 'wrong account or password' });
   const ok = verifyPassword(password, row.password_hash);
   const LIMIT2 = PROD ? 5 : 99;
-  const LOCK_MS2 = PROD ? 15*60*1000 : 60*1000;
+  const LOCK_MS2 = PROD ? 15 * 60 * 1000 : 60 * 1000;
   if (!ok) { recordLoginFailure(getThrottleKeyForAccount(acc), ip, { limit: LIMIT2, lockMs: LOCK_MS2 }); return res.status(401).json({ ok: false, error: 'wrong account or password' }); }
-  if (!['admin','super','operator'].includes(String(row.role))) return res.status(403).json({ ok: false, error: 'forbidden role' });
+  if (!['admin', 'super', 'operator'].includes(String(row.role))) return res.status(403).json({ ok: false, error: 'forbidden role' });
   // ignore disallow_login for staff accounts to reduce login friction
   if (Number(row.otp_enabled || 0) === 1 && ADMIN_OTP_REQUIRED) {
     const otp = String((req.body && req.body.otp) || '').trim();
@@ -1426,9 +1450,9 @@ app.post('/api/auth/login_account', rateLimitLogin, (req, res) => {
     recordLoginSuccess(getThrottleKeyForAccount(acc), ip);
     const country = getCountryFromHeaders(req);
     db.prepare('UPDATE users SET last_login_ip=?, last_login_country=?, updated_at=? WHERE id=?').run(encField(ip), country || null, new Date().toISOString(), row.id);
-  } catch {}
-  try { setSessionCookie(res, token); } catch {}
-  try { setCsrfCookie(res); } catch {}
+  } catch { }
+  try { setSessionCookie(res, token); } catch { }
+  try { setCsrfCookie(res); } catch { }
   res.json({ ok: true, token, user: { id: row.id, phone: row.phone, account: row.account, role: row.role, name: row.name } });
 });
 
@@ -1445,8 +1469,8 @@ app.post('/api/admin/login_account', rateLimitLogin, (req, res) => {
     : db.prepare('SELECT id, phone, name, role, password_hash, account, disallow_login, otp_enabled, otp_secret FROM users WHERE account = ?').get(acc);
   if (!row) return res.status(401).json({ ok: false, error: 'wrong account or password' });
   const ok = verifyPassword(password, row.password_hash);
-  if (!ok) { recordLoginFailure(getThrottleKeyForAccount(acc), ip, { limit: 5, lockMs: 15*60*1000 }); return res.status(401).json({ ok: false, error: 'wrong account or password' }); }
-  if (!['admin','super','operator'].includes(String(row.role))) return res.status(403).json({ ok: false, error: 'forbidden role' });
+  if (!ok) { recordLoginFailure(getThrottleKeyForAccount(acc), ip, { limit: 5, lockMs: 15 * 60 * 1000 }); return res.status(401).json({ ok: false, error: 'wrong account or password' }); }
+  if (!['admin', 'super', 'operator'].includes(String(row.role))) return res.status(403).json({ ok: false, error: 'forbidden role' });
   if (Number(row.otp_enabled || 0) === 1 && ADMIN_OTP_REQUIRED) {
     const otpStr = String(otp || '').trim();
     if (!otpStr || !row.otp_secret || !totpVerify(String(row.otp_secret), otpStr)) return res.status(401).json({ ok: false, error: 'otp_required' });
@@ -1456,14 +1480,14 @@ app.post('/api/admin/login_account', rateLimitLogin, (req, res) => {
     recordLoginSuccess(getThrottleKeyForAccount(acc), ip);
     const country = getCountryFromHeaders(req);
     db.prepare('UPDATE users SET last_login_ip=?, last_login_country=?, updated_at=? WHERE id=?').run(encField(ip), country || null, new Date().toISOString(), row.id);
-  } catch {}
-  try { setSessionCookie(res, token); } catch {}
-  try { setCsrfCookie(res); } catch {}
+  } catch { }
+  try { setSessionCookie(res, token); } catch { }
+  try { setCsrfCookie(res); } catch { }
   res.json({ ok: true, token, user: { id: row.id, phone: row.phone, account: row.account, role: row.role, name: row.name } });
 });
 
 // ---- Admin: 用户列表 ----
-app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, res) => {
+app.get('/api/admin/users', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     const assigned = String(req.query.assigned || 'all').toLowerCase();
@@ -1474,8 +1498,8 @@ app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, re
     const assignedCond = assigned === 'assigned'
       ? ' AND (assigned_admin_id IS NOT NULL OR assigned_operator_id IS NOT NULL)'
       : assigned === 'unassigned'
-      ? ' AND assigned_admin_id IS NULL AND assigned_operator_id IS NULL'
-      : '';
+        ? ' AND assigned_admin_id IS NULL AND assigned_operator_id IS NULL'
+        : '';
     const role = String(req.user?.role || '');
     let extraCond = '';
     const extraParams = [];
@@ -1489,7 +1513,7 @@ app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, re
       const aid = Number(req.user.id || 0);
       if (assigned === 'assigned' || assigned === 'all') {
         const ops = db.prepare("SELECT id FROM users WHERE role = 'operator' AND assigned_admin_id = ?").all(aid).map(r => Number(r.id));
-        if (ops.length > 0) { extraCond = ` AND assigned_operator_id IN (${ops.map(()=>'?').join(',')})`; extraParams.push(...ops); }
+        if (ops.length > 0) { extraCond = ` AND assigned_operator_id IN (${ops.map(() => '?').join(',')})`; extraParams.push(...ops); }
         else { extraCond = ' AND 1=0'; }
       }
     }
@@ -1503,15 +1527,15 @@ app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, re
         if (includeBalances) {
           const ids = rows.map(r => Number(r.id));
           if (ids.length > 0) {
-            const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(()=>'?').join(',')})`).all(...ids);
+            const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(() => '?').join(',')})`).all(...ids);
             for (const r of balRows) {
               const m = balMap.get(r.user_id) || { MXN: 0, USD: 0, USDT: 0 };
-              m[String(r.currency||'').toUpperCase()] = Number(r.amount||0);
+              m[String(r.currency || '').toUpperCase()] = Number(r.amount || 0);
               balMap.set(r.user_id, m);
             }
           }
         }
-        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN:0, USD:0, USDT:0 }) : undefined }));
+        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN: 0, USD: 0, USDT: 0 }) : undefined }));
         return res.json({ ok: true, users, total: cntExact });
       } else {
         const like = `%${q}%`;
@@ -1522,15 +1546,15 @@ app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, re
         if (includeBalances) {
           const ids = rows.map(r => Number(r.id));
           if (ids.length > 0) {
-            const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(()=>'?').join(',')})`).all(...ids);
+            const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(() => '?').join(',')})`).all(...ids);
             for (const r of balRows) {
               const m = balMap.get(r.user_id) || { MXN: 0, USD: 0, USDT: 0 };
-              m[String(r.currency||'').toUpperCase()] = Number(r.amount||0);
+              m[String(r.currency || '').toUpperCase()] = Number(r.amount || 0);
               balMap.set(r.user_id, m);
             }
           }
         }
-        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN:0, USD:0, USDT:0 }) : undefined }));
+        const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN: 0, USD: 0, USDT: 0 }) : undefined }));
         return res.json({ ok: true, users, total: c });
       }
     } else {
@@ -1541,15 +1565,15 @@ app.get('/api/admin/users', requireRoles(['super','admin','operator']), (req, re
       if (includeBalances) {
         const ids = rows.map(r => Number(r.id));
         if (ids.length > 0) {
-          const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(()=>'?').join(',')})`).all(...ids);
+          const balRows = db.prepare(`SELECT user_id, currency, amount FROM balances WHERE user_id IN (${ids.map(() => '?').join(',')})`).all(...ids);
           for (const r of balRows) {
             const m = balMap.get(r.user_id) || { MXN: 0, USD: 0, USDT: 0 };
-            m[String(r.currency||'').toUpperCase()] = Number(r.amount||0);
+            m[String(r.currency || '').toUpperCase()] = Number(r.amount || 0);
             balMap.set(r.user_id, m);
           }
         }
       }
-      const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, credit_score: Number.isFinite(Number(u.credit_score)) ? Number(u.credit_score) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN:0, USD:0, USDT:0 }) : undefined }));
+      const users = rows.map(u => ({ ...u, last_login_ip: u.last_login_ip ? decField(u.last_login_ip) : null, credit_score: Number.isFinite(Number(u.credit_score)) ? Number(u.credit_score) : null, balances: includeBalances ? (balMap.get(u.id) || { MXN: 0, USD: 0, USDT: 0 }) : undefined }));
       return res.json({ ok: true, users, total: c });
     }
   } catch (e) {
@@ -1568,7 +1592,7 @@ function operatorCanManageCustomer(req, uid) {
   } catch { return false; }
 }
 
-app.post('/api/admin/users/:uid/password', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/users/:uid/password', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const uid = Number(req.params.uid);
     const { password } = req.body || {};
@@ -1590,7 +1614,7 @@ app.post('/api/admin/users/:uid/password', requireRoles(['super','admin','operat
 // [removed] 用户角色变更：客户与后台账号体系独立，此路由移除
 
 // ---- Admin: 用户资金调整 ----
-app.post('/api/admin/users/:uid/funds', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/users/:uid/funds', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const uid = Number(req.params.uid);
     const { ops, reason = '', requestId = '', operatorId = null, operatorRole = '' } = req.body || {};
@@ -1603,7 +1627,7 @@ app.post('/api/admin/users/:uid/funds', requireRoles(['super','admin','operator'
     for (const r of ops) {
       const c = String(r?.currency || '').trim().toUpperCase();
       const a = Number(r?.amount || 0);
-      if (!['MXN','USD','USDT'].includes(c)) return res.status(400).json({ ok: false, error: 'bad currency' });
+      if (!['MXN', 'USD', 'USDT'].includes(c)) return res.status(400).json({ ok: false, error: 'bad currency' });
       if (!Number.isFinite(a)) return res.status(400).json({ ok: false, error: 'bad amount' });
       upsertBalance(uid, c, a);
       try {
@@ -1611,7 +1635,7 @@ app.post('/api/admin/users/:uid/funds', requireRoles(['super','admin','operator'
         const opRoleFinal = String(req.user.role) || String(operatorRole || '');
         db.prepare('INSERT INTO fund_audit (user_id, operator_id, operator_role, request_id, reason, currency, amount, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
           .run(uid, opIdFinal, opRoleFinal, String(requestId || ''), String(reason || ''), c, a, new Date().toISOString());
-      } catch {}
+      } catch { }
     }
     res.json({ ok: true });
   } catch (e) {
@@ -1620,7 +1644,7 @@ app.post('/api/admin/users/:uid/funds', requireRoles(['super','admin','operator'
 });
 
 // ---- Admin: 设置用户归属 ----
-app.post('/api/admin/users/:uid/assign', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/users/:uid/assign', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const uid = Number(req.params.uid);
     const { adminId = null, operatorId = null } = req.body || {};
@@ -1630,9 +1654,9 @@ app.post('/api/admin/users/:uid/assign', requireRoles(['super','admin','operator
     const toIntOrNull = (v) => v === '' || v === null || typeof v === 'undefined' ? null : Number(v);
     let aid = toIntOrNull(adminId);
     let oid = toIntOrNull(operatorId);
-  if (String(req.user.role) === 'operator') {
+    if (String(req.user.role) === 'operator') {
       // 运营仅可将客户归属到自己，不允许修改管理员归属
-      if (!operatorCanManageCustomer(req, uid)) return res.status(403).json({ ok:false, error:'Forbidden' });
+      if (!operatorCanManageCustomer(req, uid)) return res.status(403).json({ ok: false, error: 'Forbidden' });
       aid = null; // 不允许操作管理员归属
       oid = Number(req.user.id);
     }
@@ -1649,7 +1673,7 @@ app.post('/api/admin/users/:uid/assign', requireRoles(['super','admin','operator
 });
 
 // ---- Admin: 删除用户 ----
-app.delete('/api/admin/users/:uid', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/users/:uid', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const uid = Number(req.params.uid);
     if (!Number.isFinite(uid)) return res.status(400).json({ ok: false, error: 'bad uid' });
@@ -1665,7 +1689,7 @@ app.delete('/api/admin/users/:uid', requireRoles(['super','admin']), (req, res) 
 });
 
 // ---- Admin: 代登录（颁发目标用户令牌） ----
-app.post('/api/admin/impersonate', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/impersonate', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { userId } = req.body || {};
     const uid = Number(userId);
@@ -1685,8 +1709,8 @@ app.post('/api/auth/logout', requireAuth, (req, res) => {
     const hdr = String(req.headers['authorization'] || '').trim();
     const tk = hdr.replace(/^Bearer\s+/i, '').trim();
     if (tk) {
-      try { db.prepare('DELETE FROM tokens WHERE token_hash = ?').run(sha256(tk)); } catch {}
-      try { db.prepare('DELETE FROM tokens WHERE token = ?').run(tk); } catch {}
+      try { db.prepare('DELETE FROM tokens WHERE token_hash = ?').run(sha256(tk)); } catch { }
+      try { db.prepare('DELETE FROM tokens WHERE token = ?').run(tk); } catch { }
     }
     clearSessionCookie(res);
     res.status(204).send();
@@ -1696,7 +1720,7 @@ app.post('/api/auth/logout', requireAuth, (req, res) => {
 });
 
 // ---- Admin: 用户余额 ----
-app.get('/api/admin/users/:uid/balances', requireRoles(['super','admin']), (req, res) => {
+app.get('/api/admin/users/:uid/balances', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const uid = Number(req.params.uid);
     if (!Number.isFinite(uid)) return res.status(400).json({ ok: false, error: 'bad uid' });
@@ -1712,7 +1736,7 @@ app.get('/api/me/positions', requireAuth, (req, res) => {
   try {
     const uid = Number(req.user.id);
     const cols = ensurePosCols();
-    const selectCols = ['symbol','market','long_qty','short_qty','updated_at'];
+    const selectCols = ['symbol', 'market', 'long_qty', 'short_qty', 'updated_at'];
     if (cols.hasAvgPrice) selectCols.push('avg_price');
     if (cols.hasLongAvg) selectCols.push('long_avg');
     if (cols.hasShortAvg) selectCols.push('short_avg');
@@ -1745,7 +1769,7 @@ app.get('/api/me/balances', requireAuth, (req, res) => {
     try {
       const mxn = db.prepare('SELECT amount FROM balances WHERE user_id = ? AND currency = ?').get(uid, 'MXN')?.amount || 0;
       disabled = Number(mxn) < 0;
-    } catch {}
+    } catch { }
     res.json({ ok: true, balances: rows, disabled });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -1768,9 +1792,9 @@ app.post('/api/me/avatar', requireAuth, (req, res) => {
     const uid = Number(req.user.id);
     const ext = mime.includes('png') ? '.png' : (mime.includes('webp') ? '.webp' : '.jpg');
     const d = new Date();
-    const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
     const userDir = path.join(UPLOADS_DIR, 'users', String(uid));
-    try { fs.mkdirSync(userDir, { recursive: true }); } catch {}
+    try { fs.mkdirSync(userDir, { recursive: true }); } catch { }
     const filename = `avatar_${stamp}${ext}`;
     const absPath = path.join(userDir, filename);
     fs.writeFileSync(absPath, buf);
@@ -1817,17 +1841,17 @@ function currencyForMarket(market) {
 }
 function isTradingAllowedForMarket(market) {
   try {
-    const s = db.prepare('SELECT mx_enabled, us_enabled, mx_holidays, us_holidays FROM market_settings WHERE id = 1').get() || { mx_enabled:1, us_enabled:1, mx_holidays:'', us_holidays:'' };
+    const s = db.prepare('SELECT mx_enabled, us_enabled, mx_holidays, us_holidays FROM market_settings WHERE id = 1').get() || { mx_enabled: 1, us_enabled: 1, mx_holidays: '', us_holidays: '' };
     const now = new Date();
-    const y = now.getFullYear(); const m = (now.getMonth()+1).toString().padStart(2,'0'); const d = now.getDate().toString().padStart(2,'0');
+    const y = now.getFullYear(); const m = (now.getMonth() + 1).toString().padStart(2, '0'); const d = now.getDate().toString().padStart(2, '0');
     const today = `${y}-${m}-${d}`;
     const wd = now.getDay();
-    const minutes = now.getHours()*60 + now.getMinutes();
-    const start = 8*60 + 30; // 08:30
-    const end = 15*60; // 15:00
-    const withinWindow = (wd>=1 && wd<=5) && (minutes>=start && minutes<=end);
-    const listMx = String(s.mx_holidays||'').split(/[\s,]+/).filter(Boolean);
-    const listUs = String(s.us_holidays||'').split(/[\s,]+/).filter(Boolean);
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const start = 8 * 60 + 30; // 08:30
+    const end = 15 * 60; // 15:00
+    const withinWindow = (wd >= 1 && wd <= 5) && (minutes >= start && minutes <= end);
+    const listMx = String(s.mx_holidays || '').split(/[\s,]+/).filter(Boolean);
+    const listUs = String(s.us_holidays || '').split(/[\s,]+/).filter(Boolean);
     if (market === 'mx') {
       if (!s.mx_enabled) return true; // 开关关闭：不限时
       if (listMx.includes(today)) return false;
@@ -1848,13 +1872,13 @@ function upsertBalance(userId, currency, delta, reason = 'system') {
   db.prepare(`INSERT INTO balances (user_id, currency, amount, updated_at) VALUES (?, ?, ?, ?)
              ON CONFLICT(user_id, currency) DO UPDATE SET amount=excluded.amount, updated_at=excluded.updated_at`)
     .run(userId, currency, next, now);
-  try { db.exec('CREATE TABLE IF NOT EXISTS balance_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, currency TEXT, amount REAL, reason TEXT, admin_id INTEGER, created_at TEXT)'); } catch {}
-  try { db.prepare('INSERT INTO balance_logs (user_id, currency, amount, reason, admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(Number(userId), String(currency||''), Number(delta||0), String(reason||'system'), null, now); } catch {}
+  try { db.exec('CREATE TABLE IF NOT EXISTS balance_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, currency TEXT, amount REAL, reason TEXT, admin_id INTEGER, created_at TEXT)'); } catch { }
+  try { db.prepare('INSERT INTO balance_logs (user_id, currency, amount, reason, admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(Number(userId), String(currency || ''), Number(delta || 0), String(reason || 'system'), null, now); } catch { }
   if (String(currency).toUpperCase() === 'MXN') {
     try {
       const flag = Number(next) < 0 ? 1 : 0;
       db.prepare('UPDATE users SET disallow_trading=?, updated_at=? WHERE id=?').run(flag, now, userId);
-    } catch {}
+    } catch { }
   }
 }
 
@@ -1882,28 +1906,28 @@ async function getUsdMxnRateServer() {
       const j = await res.json();
       const price = Number(j?.price ?? j?.close ?? j?.previous_close);
       if (Number.isFinite(price) && price > 0) { fxCache = { rate: price, ts: Date.now() }; return price; }
-    } catch {}
+    } catch { }
   }
   try {
-    const j = await fetch('https://open.er-api.com/v6/latest/USD').then(r=>r.json());
+    const j = await fetch('https://open.er-api.com/v6/latest/USD').then(r => r.json());
     const rate = Number(j?.rates?.MXN || NaN);
     if (Number.isFinite(rate) && rate > 0) { fxCache = { rate, ts: Date.now() }; return rate; }
-  } catch {}
+  } catch { }
   try {
-    const j = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=MXN').then(r=>r.json());
+    const j = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=MXN').then(r => r.json());
     const rate = Number(j?.rates?.MXN || NaN);
     if (Number.isFinite(rate) && rate > 0) { fxCache = { rate, ts: Date.now() }; return rate; }
-  } catch {}
+  } catch { }
   return fxCache.rate;
 }
 
 // ---- Admin: Balance recharge ----
-app.post('/api/admin/balances/recharge', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/balances/recharge', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { phone, userId, currency, amount } = req.body || {};
     const cur = String(currency || '').trim().toUpperCase();
     const amt = Number(amount);
-    if (!['MXN','USD','USDT'].includes(cur)) return res.status(400).json({ error: 'bad currency' });
+    if (!['MXN', 'USD', 'USDT'].includes(cur)) return res.status(400).json({ error: 'bad currency' });
     if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'bad amount' });
     let uid = Number(userId || 0);
     if (!uid && phone) {
@@ -1919,7 +1943,7 @@ app.post('/api/admin/balances/recharge', requireRoles(['super','admin']), (req, 
         .run(uid, cur, amt, 'admin_recharge', Number(req.user.id), now);
       db.prepare('INSERT INTO notifications (user_id, message, created_at, read) VALUES (?, ?, ?, 0)')
         .run(uid, `你已成功充值 ${cur} ${amt}`, now);
-    } catch {}
+    } catch { }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
@@ -1936,7 +1960,7 @@ app.get('/api/admin/balances/logs', requireRoles(adminReadRoles()), (req, res) =
     if (currency) { where.push('bl.currency = ?'); params.push(String(currency).toUpperCase()); }
     if (from) { where.push('bl.created_at >= ?'); params.push(String(from)); }
     if (to) { where.push('bl.created_at <= ?'); params.push(String(to)); }
-    if (String(req.user?.role||'') === 'operator') { where.push('u.assigned_operator_id = ?'); params.push(Number(req.user.id || 0)); }
+    if (String(req.user?.role || '') === 'operator') { where.push('u.assigned_operator_id = ?'); params.push(Number(req.user.id || 0)); }
     const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
     const p = Math.max(1, Number(page || 1));
     const ps = Math.max(1, Math.min(200, Number(pageSize || 20)));
@@ -1968,7 +1992,7 @@ function ensurePosCols() {
 function upsertPosition(userId, symbol, market, side, qty, price) {
   const now = new Date().toISOString();
   const cols = ensurePosCols();
-  const selectCols = ['id','long_qty','short_qty'];
+  const selectCols = ['id', 'long_qty', 'short_qty'];
   if (cols.hasAvgPrice) selectCols.push('avg_price');
   if (cols.hasLongAvg) selectCols.push('long_avg');
   if (cols.hasShortAvg) selectCols.push('short_avg');
@@ -2015,7 +2039,7 @@ function upsertPosition(userId, symbol, market, side, qty, price) {
     }
   }
   if (row?.id) {
-    const setParts = ['long_qty=?','short_qty=?'];
+    const setParts = ['long_qty=?', 'short_qty=?'];
     const params = [longQty, shortQty];
     if (cols.hasAvgPrice) { setParts.push('avg_price=?'); params.push(longAvg); }
     if (cols.hasLongAvg) { setParts.push('long_avg=?'); params.push(longAvg); }
@@ -2025,14 +2049,14 @@ function upsertPosition(userId, symbol, market, side, qty, price) {
     params.push(row.id);
     db.prepare(`UPDATE positions SET ${setParts.join(', ')} WHERE id=?`).run(...params);
   } else {
-    const colsList = ['user_id','symbol','market','long_qty','short_qty'];
-    const valsList = ['?','?','?','?','?'];
+    const colsList = ['user_id', 'symbol', 'market', 'long_qty', 'short_qty'];
+    const valsList = ['?', '?', '?', '?', '?'];
     const params = [userId, symbol, market, longQty, shortQty];
     if (cols.hasAvgPrice) { colsList.push('avg_price'); valsList.push('?'); params.push(longAvg); }
     if (cols.hasLongAvg) { colsList.push('long_avg'); valsList.push('?'); params.push(longAvg); }
     if (cols.hasShortAvg) { colsList.push('short_avg'); valsList.push('?'); params.push(shortAvg); }
-    colsList.push('created_at','updated_at');
-    valsList.push('?','?');
+    colsList.push('created_at', 'updated_at');
+    valsList.push('?', '?');
     params.push(now, now);
     db.prepare(`INSERT INTO positions (${colsList.join(', ')}) VALUES (${valsList.join(', ')})`).run(...params);
   }
@@ -2043,7 +2067,7 @@ app.post('/api/trade/execute', requireAuth, async (req, res) => {
   try {
     const { symbol, side, qty, price } = req.body || {};
     if (!symbol || !side) return res.status(400).json({ ok: false, error: 'invalid payload' });
-    if (!['buy','sell'].includes(String(side))) return res.status(400).json({ ok: false, error: 'bad side' });
+    if (!['buy', 'sell'].includes(String(side))) return res.status(400).json({ ok: false, error: 'bad side' });
     if (!Number.isFinite(Number(qty)) || Number(qty) <= 0) return res.status(400).json({ ok: false, error: 'bad qty' });
     if (!Number.isFinite(Number(price)) || Number(price) <= 0) return res.status(400).json({ ok: false, error: 'bad price' });
     const market = detectMarketFromSymbol(symbol);
@@ -2055,13 +2079,13 @@ app.post('/api/trade/execute', requireAuth, async (req, res) => {
       try {
         const bal = db.prepare('SELECT amount FROM balances WHERE user_id = ? AND currency = ?').get(Number(req.user.id), 'MXN')?.amount || 0;
         if (Number(bal) < Number(cost)) return res.status(400).json({ ok: false, error: 'insufficient_funds_mxn', need: Number(cost), have: Number(bal) });
-      } catch {}
+      } catch { }
     }
     if (side === 'sell') {
       try {
         const pRow = db.prepare('SELECT locked, long_qty FROM positions WHERE user_id = ? AND symbol = ? AND market = ?').get(Number(req.user.id), symbol, market);
         if (pRow && Number(pRow.locked || 0) === 1 && Number(pRow.long_qty || 0) > 0) return res.status(400).json({ ok: false, error: 'locked' });
-      } catch {}
+      } catch { }
     }
     const delta = side === 'buy' ? -cost : cost;
     upsertBalance(req.user.id, currency, delta, side === 'buy' ? 'trade_buy_market' : 'trade_sell_market');
@@ -2078,7 +2102,7 @@ app.post('/api/trade/execute', requireAuth, async (req, res) => {
       const title = '交易已执行';
       const msg = isClose ? `你已完成平仓 ${symbol}，成交总金额 MX$${amtStr}` : (side === 'buy' ? `你已完成购买 ${symbol}，成交总金额 MX$${amtStr}` : `你已完成卖出 ${symbol}，成交总金额 MX$${amtStr}`);
       db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(Number(req.user.id), title, msg, now);
-    } catch {}
+    } catch { }
     res.json({ ok: true, order });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -2091,7 +2115,7 @@ app.post('/api/trade/orders', requireAuth, (req, res) => {
     const { symbol, side, price, qty, limitPrice } = req.body || {};
     const p = Number(typeof limitPrice !== 'undefined' ? limitPrice : price);
     if (!symbol || !side) return res.status(400).json({ ok: false, error: 'invalid payload' });
-    if (!['buy','sell'].includes(String(side))) return res.status(400).json({ ok: false, error: 'bad side' });
+    if (!['buy', 'sell'].includes(String(side))) return res.status(400).json({ ok: false, error: 'bad side' });
     if (!Number.isFinite(Number(qty)) || Number(qty) <= 0) return res.status(400).json({ ok: false, error: 'bad qty' });
     if (!Number.isFinite(Number(p)) || Number(p) <= 0) return res.status(400).json({ ok: false, error: 'bad price' });
     const now = new Date().toISOString();
@@ -2100,7 +2124,7 @@ app.post('/api/trade/orders', requireAuth, (req, res) => {
       try {
         const pRow = db.prepare('SELECT locked, long_qty FROM positions WHERE user_id = ? AND symbol = ? AND market = ?').get(Number(req.user.id), symbol, detectMarketFromSymbol(symbol));
         if (pRow && Number(pRow.locked || 0) === 1 && Number(pRow.long_qty || 0) > 0) return res.status(400).json({ ok: false, error: 'locked' });
-      } catch {}
+      } catch { }
     }
     const info = db.prepare('INSERT INTO orders (user_id, symbol, market, side, type, price, qty, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(req.user.id, symbol, detectMarketFromSymbol(symbol), side, 'limit', Number(p), Number(qty), 'pending', now, now);
@@ -2129,32 +2153,32 @@ app.post('/api/trade/orders/:id/fill', requireAuth, async (req, res) => {
       try {
         const pRow = db.prepare('SELECT locked, long_qty FROM positions WHERE user_id = ? AND symbol = ? AND market = ?').get(Number(req.user.id), order.symbol, market);
         if (pRow && Number(pRow.locked || 0) === 1 && Number(pRow.long_qty || 0) > 0) return res.status(400).json({ ok: false, error: 'locked' });
-      } catch {}
+      } catch { }
     }
     const rate = market === 'mx' ? 1 : await getUsdMxnRateServer();
-  const currency = 'MXN';
-  const cost = Number(qty) * Number(p) * Number(rate);
+    const currency = 'MXN';
+    const cost = Number(qty) * Number(p) * Number(rate);
     if (order.side === 'buy') {
       try {
         const bal = db.prepare('SELECT amount FROM balances WHERE user_id = ? AND currency = ?').get(Number(req.user.id), 'MXN')?.amount || 0;
         if (Number(bal) < Number(cost)) return res.status(400).json({ ok: false, error: 'insufficient_funds_mxn', need: Number(cost), have: Number(bal) });
-      } catch {}
+      } catch { }
     }
     const delta2 = order.side === 'buy' ? -cost : cost;
-  upsertBalance(req.user.id, currency, delta2, order.side === 'buy' ? 'trade_buy_limit' : 'trade_sell_limit');
-  const prev2 = db.prepare('SELECT long_qty, short_qty FROM positions WHERE user_id = ? AND symbol = ? AND market = ?').get(Number(req.user.id), order.symbol, market) || { long_qty: 0, short_qty: 0 };
-  const isClose2 = (order.side === 'sell' && Number(prev2.long_qty || 0) > 0) || (order.side === 'buy' && Number(prev2.short_qty || 0) > 0);
-  upsertPosition(req.user.id, order.symbol, market, order.side, Number(qty), Number(p));
-  const now = new Date().toISOString();
-  db.prepare('UPDATE orders SET status=?, price=?, qty=?, updated_at=? WHERE id=?').run('filled', Number(p), Number(qty), now, id);
-  const updated = db.prepare('SELECT id, symbol, market, side, type, price, qty, status, created_at, updated_at FROM orders WHERE id = ?').get(id);
-  try {
-    const amtStr = Number(cost).toFixed(2);
-    const title = '交易已执行';
-    const msg = isClose2 ? `你已完成平仓 ${order.symbol}，成交总金额 MX$${amtStr}` : (order.side === 'buy' ? `你已完成购买 ${order.symbol}，成交总金额 MX$${amtStr}` : `你已完成卖出 ${order.symbol}，成交总金额 MX$${amtStr}`);
-    db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(Number(req.user.id), title, msg, now);
-  } catch {}
-  res.json({ ok: true, order: updated });
+    upsertBalance(req.user.id, currency, delta2, order.side === 'buy' ? 'trade_buy_limit' : 'trade_sell_limit');
+    const prev2 = db.prepare('SELECT long_qty, short_qty FROM positions WHERE user_id = ? AND symbol = ? AND market = ?').get(Number(req.user.id), order.symbol, market) || { long_qty: 0, short_qty: 0 };
+    const isClose2 = (order.side === 'sell' && Number(prev2.long_qty || 0) > 0) || (order.side === 'buy' && Number(prev2.short_qty || 0) > 0);
+    upsertPosition(req.user.id, order.symbol, market, order.side, Number(qty), Number(p));
+    const now = new Date().toISOString();
+    db.prepare('UPDATE orders SET status=?, price=?, qty=?, updated_at=? WHERE id=?').run('filled', Number(p), Number(qty), now, id);
+    const updated = db.prepare('SELECT id, symbol, market, side, type, price, qty, status, created_at, updated_at FROM orders WHERE id = ?').get(id);
+    try {
+      const amtStr = Number(cost).toFixed(2);
+      const title = '交易已执行';
+      const msg = isClose2 ? `你已完成平仓 ${order.symbol}，成交总金额 MX$${amtStr}` : (order.side === 'buy' ? `你已完成购买 ${order.symbol}，成交总金额 MX$${amtStr}` : `你已完成卖出 ${order.symbol}，成交总金额 MX$${amtStr}`);
+      db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(Number(req.user.id), title, msg, now);
+    } catch { }
+    res.json({ ok: true, order: updated });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
@@ -2186,7 +2210,7 @@ app.get('/api/trade/block/list', (req, res) => {
   }
 });
 
-app.post('/api/admin/trade/block/create', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/block/create', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { market, symbol, price, minQty, startAt, endAt, lockUntil, subscribeKey } = req.body || {};
     const mkt = String(market || '').trim().toLowerCase();
@@ -2206,7 +2230,7 @@ app.post('/api/admin/trade/block/create', requireRoles(['super','admin']), (req,
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
-app.post('/api/admin/trade/block/:id/update', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/block/:id/update', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -2228,7 +2252,7 @@ app.post('/api/admin/trade/block/:id/update', requireRoles(['super','admin']), (
   }
 });
 
-app.delete('/api/admin/trade/block/:id', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/trade/block/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -2239,7 +2263,7 @@ app.delete('/api/admin/trade/block/:id', requireRoles(['super','admin']), (req, 
   }
 });
 
-app.post('/api/admin/trade/block/:id/activate', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/block/:id/activate', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -2252,7 +2276,7 @@ app.post('/api/admin/trade/block/:id/activate', requireRoles(['super','admin']),
   }
 });
 
-app.post('/api/admin/trade/block/:id/deactivate', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/block/:id/deactivate', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -2276,7 +2300,7 @@ app.get('/api/admin/trade/block/orders', requireRoles(adminReadRoles()), (req, r
     const params = [];
     if (status) { where.push('o.status = ?'); params.push(status); }
     if (phone) { where.push('u.phone = ?'); params.push(phone); }
-    if (String(req.user?.role||'') === 'operator') { operatorId = Number(req.user.id || 0); }
+    if (String(req.user?.role || '') === 'operator') { operatorId = Number(req.user.id || 0); }
     if (operatorId !== null) { where.push('u.assigned_operator_id = ?'); params.push(operatorId); }
     if (adminId !== null) { where.push('u.assigned_admin_id = ?'); params.push(adminId); }
     const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
@@ -2311,7 +2335,7 @@ app.get('/api/admin/trade/block/orders', requireRoles(adminReadRoles()), (req, r
         approved_at: r.approved_at,
         lock_until: r.lock_until,
         lock_until_ts: ts,
-        locked: Number(r.locked||0)===1,
+        locked: Number(r.locked || 0) === 1,
         notes: r.notes,
       };
     });
@@ -2321,29 +2345,31 @@ app.get('/api/admin/trade/block/orders', requireRoles(adminReadRoles()), (req, r
   }
 });
 
-app.post('/api/admin/trade/block/orders/:id/approve', requireRoles(['super','admin','operator']), async (req, res) => {
+app.post('/api/admin/trade/block/orders/:id/approve', requireRoles(['super', 'admin', 'operator']), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const exists = db.prepare('SELECT id, user_id, block_trade_id, price, qty, status FROM block_trade_orders WHERE id = ?').get(id);
     if (!exists || exists.status !== 'submitted') return res.status(404).json({ error: 'not submitted' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(exists.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
     const bt = db.prepare('SELECT market, symbol, lock_until FROM block_trades WHERE id = ?').get(exists.block_trade_id);
     const now = new Date().toISOString();
     const lu = bt?.lock_until || null;
-  db.prepare('UPDATE block_trade_orders SET status=?, approved_at=?, lock_until=?, locked=? WHERE id=?').run('approved', now, lu, 1, id);
-  // 扣款并入仓（统一 MXN 按汇率）
-  try {
-    const mkt = String(bt?.market || 'us');
-    const rate = mkt === 'mx' ? 1 : await getUsdMxnRateServer();
-    const mxnCost = Number(exists.qty) * Number(exists.price) * Number(rate);
-    upsertBalance(Number(exists.user_id), 'MXN', -mxnCost, 'block_approve');
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
-      .run(Number(exists.user_id), '大宗交易已购买', `你已成功购买 ${String(bt.symbol||'')}，已支付 MX$${Number(mxnCost).toFixed(2)}`, new Date().toISOString()); } catch {}
-  } catch {}
+    db.prepare('UPDATE block_trade_orders SET status=?, approved_at=?, lock_until=?, locked=? WHERE id=?').run('approved', now, lu, 1, id);
+    // 扣款并入仓（统一 MXN 按汇率）
+    try {
+      const mkt = String(bt?.market || 'us');
+      const rate = mkt === 'mx' ? 1 : await getUsdMxnRateServer();
+      const mxnCost = Number(exists.qty) * Number(exists.price) * Number(rate);
+      upsertBalance(Number(exists.user_id), 'MXN', -mxnCost, 'block_approve');
+      try {
+        db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
+          .run(Number(exists.user_id), '大宗交易已购买', `你已成功购买 ${String(bt.symbol || '')}，已支付 MX$${Number(mxnCost).toFixed(2)}`, new Date().toISOString());
+      } catch { }
+    } catch { }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
@@ -2401,11 +2427,11 @@ app.post('/api/trade/block/subscribe', requireAuth, async (req, res) => {
     if (String(bt.subscribe_key || '') !== String(key || '')) return res.status(400).json({ error: 'bad key', code: 3003 });
     // 资金校验（统一 MXN）
     try {
-      const rate = String(bt.market||'us') === 'mx' ? 1 : await getUsdMxnRateServer();
+      const rate = String(bt.market || 'us') === 'mx' ? 1 : await getUsdMxnRateServer();
       const mxnCost = Number(q) * Number(p) * Number(rate);
       const bal = db.prepare('SELECT amount FROM balances WHERE user_id = ? AND currency = ?').get(Number(req.user.id), 'MXN')?.amount || 0;
       if (Number(bal) < Number(mxnCost)) return res.status(400).json({ error: 'insufficient_funds_mxn', need: Number(mxnCost), have: Number(bal) });
-    } catch {}
+    } catch { }
     const info = db.prepare('INSERT INTO block_trade_orders (block_trade_id, user_id, price, qty, amount, status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(bt.id, Number(req.user.id), p, q, p * q, 'submitted', new Date().toISOString());
     res.json({ id: info.lastInsertRowid, status: 'submitted' });
@@ -2414,14 +2440,14 @@ app.post('/api/trade/block/subscribe', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/admin/trade/block/orders/:id/reject', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/trade/block/orders/:id/reject', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const { notes = '' } = req.body || {};
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const exists = db.prepare('SELECT id, user_id, status FROM block_trade_orders WHERE id = ?').get(id);
     if (!exists || exists.status !== 'submitted') return res.status(404).json({ error: 'not submitted' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(exists.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
@@ -2445,7 +2471,7 @@ app.get('/version', (req, res) => {
     const api = { name: 'mxg-backend', version: '1.0.1' };
     const buildInfoPath = path.join(guessDist() || '', 'build-info.json');
     let build = { buildTime: '' };
-    try { build = JSON.parse(fs.readFileSync(buildInfoPath, 'utf8')); } catch {}
+    try { build = JSON.parse(fs.readFileSync(buildInfoPath, 'utf8')); } catch { }
     const ts = new Date().toISOString();
     const origin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['host'] || ''}`;
     res.json({ api, frontendAssets, build, ts, origin });
@@ -2459,7 +2485,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // ---- Admin: Staffs list/create/delete ----
-app.get('/api/admin/staffs', requireRoles(['super','admin','operator']), (req, res) => {
+app.get('/api/admin/staffs', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     const page = Math.max(1, Number(req.query.page || 1));
@@ -2467,12 +2493,12 @@ app.get('/api/admin/staffs', requireRoles(['super','admin','operator']), (req, r
     const offset = (page - 1) * pageSize;
     let whereSql = "WHERE role IN ('admin','operator','super')";
     const params = [];
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const me = db.prepare('SELECT assigned_admin_id FROM users WHERE id = ?').get(Number(req.user.id));
       const aid = Number(me?.assigned_admin_id || 0);
       const ids = [Number(req.user.id)];
       if (aid) ids.push(aid);
-      whereSql = `WHERE id IN (${ids.map(()=>'?').join(',')})`;
+      whereSql = `WHERE id IN (${ids.map(() => '?').join(',')})`;
       params.push(...ids);
     } else {
       if (q) { whereSql += ' AND (account LIKE ? OR name LIKE ?)'; params.push(`%${q}%`, `%${q}%`); }
@@ -2485,14 +2511,14 @@ app.get('/api/admin/staffs', requireRoles(['super','admin','operator']), (req, r
   }
 });
 
-app.post('/api/admin/staffs', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/staffs', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { name, account, password, role, adminId = null } = req.body || {};
     const n = String(name || '').trim();
     const acc = String(account || '').trim();
     const r = String(role || '').trim();
     if (!n || !acc || !password || String(password).length < 6) return res.status(400).json({ error: 'invalid payload' });
-    if (!['admin','operator'].includes(r)) return res.status(400).json({ error: 'bad role' });
+    if (!['admin', 'operator'].includes(r)) return res.status(400).json({ error: 'bad role' });
     const now = new Date().toISOString();
     const info = db.prepare('INSERT INTO users (email, password_hash, name, created_at, updated_at, phone, role, account, assigned_admin_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(`${acc}@account.local`, hashPassword(password), n, now, now, null, r, acc, adminId === null ? null : Number(adminId));
@@ -2502,7 +2528,7 @@ app.post('/api/admin/staffs', requireRoles(['super','admin']), (req, res) => {
   }
 });
 
-app.delete('/api/admin/staffs/:id', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/staffs/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -2517,7 +2543,7 @@ app.delete('/api/admin/staffs/:id', requireRoles(['super','admin']), (req, res) 
 });
 
 // ---- Admin: Positions aggregated query ----
-app.get('/api/admin/positions', requireRoles(['super','admin','operator']), (req, res) => {
+app.get('/api/admin/positions', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const phone = String(req.query.phone || '').trim();
     let operatorId = req.query.operatorId ? Number(req.query.operatorId) : null;
@@ -2530,7 +2556,7 @@ app.get('/api/admin/positions', requireRoles(['super','admin','operator']), (req
     const where = [];
     const params = [];
     if (phone) { where.push('u.phone = ?'); params.push(phone); }
-    if (String(req.user?.role||'') === 'operator') { operatorId = Number(req.user.id || 0); }
+    if (String(req.user?.role || '') === 'operator') { operatorId = Number(req.user.id || 0); }
     if (operatorId !== null) { where.push('u.assigned_operator_id = ?'); params.push(operatorId); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const rows = db.prepare(`SELECT p.id, p.user_id AS userId, u.name AS userName, u.phone AS phone, u.assigned_operator_id AS operatorId, p.symbol, p.market, p.long_qty AS longQty, p.short_qty AS shortQty, p.avg_price AS avgPrice, p.locked AS locked, (p.long_qty * p.avg_price) AS amount, p.updated_at AS lastTradeAt FROM positions p JOIN users u ON p.user_id = u.id ${whereSql} ORDER BY ${sortBy === 'amount' ? 'amount' : 'lastTradeAt'} ${sortDir} LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
@@ -2551,13 +2577,13 @@ app.get('/api/admin/positions', requireRoles(['super','admin','operator']), (req
   }
 });
 
-app.post('/api/admin/positions/:id/unlock', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/positions/:id/unlock', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const row = db.prepare('SELECT p.id, u.assigned_operator_id AS opId FROM positions p JOIN users u ON p.user_id = u.id WHERE p.id = ?').get(id);
     if (!row) return res.status(404).json({ error: 'not found' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const my = Number(req.user?.id || 0);
       if (Number(row.opId || 0) !== my) return res.status(403).json({ error: 'Forbidden' });
     }
@@ -2566,13 +2592,13 @@ app.post('/api/admin/positions/:id/unlock', requireRoles(['super','admin','opera
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
-app.post('/api/admin/positions/:id/lock', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/positions/:id/lock', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const row = db.prepare('SELECT p.id, u.assigned_operator_id AS opId FROM positions p JOIN users u ON p.user_id = u.id WHERE p.id = ?').get(id);
     if (!row) return res.status(404).json({ error: 'not found' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const my = Number(req.user?.id || 0);
       if (Number(row.opId || 0) !== my) return res.status(403).json({ error: 'Forbidden' });
     }
@@ -2583,7 +2609,7 @@ app.post('/api/admin/positions/:id/lock', requireRoles(['super','admin','operato
   }
 });
 
-app.post('/api/admin/positions/:id/force_close', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/positions/:id/force_close', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const { price } = req.body || {};
@@ -2597,14 +2623,14 @@ app.post('/api/admin/positions/:id/force_close', requireRoles(['super','admin'])
     const currency = currencyForMarket(pos.market);
     upsertBalance(Number(pos.userId), currency, amt);
     db.prepare('UPDATE positions SET long_qty=0, long_avg=0, avg_price=0, updated_at=? WHERE id=?').run(new Date().toISOString(), id);
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(Number(pos.userId), '订单已强制平仓', '你的该笔订单已强制平仓', new Date().toISOString()); } catch {}
+    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(Number(pos.userId), '订单已强制平仓', '你的该笔订单已强制平仓', new Date().toISOString()); } catch { }
     res.json({ ok: true, amount: amt });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
-app.delete('/api/admin/positions/:id', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/positions/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -2623,17 +2649,17 @@ try {
     try {
       const indexPath = path.join(FRONTEND_DIST, 'index.html');
       if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
-    } catch {}
+    } catch { }
     next();
   });
-} catch {}
+} catch { }
 
 
 app.listen(PORT, () => {
-  console.log(`[mxg-backend] listening on ${PORT}, db=${resolvedDbPath}`);
+  console.log(`[mxg-backend] running on port ${PORT}`);
 });
 // ---- Admin: DB backups summary ----
-app.get('/api/admin/db/summary_list', requireRoles(['super','admin']), (req, res) => {
+app.get('/api/admin/db/summary_list', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const fs = require('fs');
     const path = require('path');
@@ -2662,7 +2688,7 @@ app.get('/api/admin/db/summary_list', requireRoles(['super','admin']), (req, res
         has_subscribe_end_at: hasCol('ipo_items', 'subscribe_end_at')
       };
       items.push(out);
-      try { tmp.close(); } catch {}
+      try { tmp.close(); } catch { }
     }
     res.json({ items, total: items.length });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
@@ -2696,7 +2722,7 @@ app.get('/api/dev/db/summary_list', (req, res) => {
         has_subscribe_end_at: hasCol('ipo_items', 'subscribe_end_at')
       };
       items.push(out);
-      try { tmp.close(); } catch {}
+      try { tmp.close(); } catch { }
     }
     res.json({ items, total: items.length });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
@@ -2769,20 +2795,20 @@ app.post('/api/dev/seed/sample', (req, res) => {
     }
     const f = db.prepare('SELECT id FROM funds WHERE code = ?').get('MXF1');
     if (!f) {
-      const tiers = JSON.stringify([{price:100,percent:6},{price:500,percent:7},{price:1000,percent:8},{price:5000,percent:10}]);
+      const tiers = JSON.stringify([{ price: 100, percent: 6 }, { price: 500, percent: 7 }, { price: 1000, percent: 8 }, { price: 5000, percent: 10 }]);
       db.prepare('INSERT INTO funds (code, name_es, name_en, desc_es, desc_en, tiers, dividend, redeem_days, currency, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run('MXF1','Fondo Demo','Demo Fund','', '', tiers, 'month', 7, 'MXN', 'active', now, now);
+        .run('MXF1', 'Fondo Demo', 'Demo Fund', '', '', tiers, 'month', 7, 'MXN', 'active', now, now);
     }
     const ipo = db.prepare('SELECT id FROM ipo_items WHERE code = ?').get('RWA1');
     if (!ipo) {
       db.prepare('INSERT INTO ipo_items (kind, name, code, subscribe_price, list_price, issue_at, subscribe_at, subscribe_end_at, list_at, can_sell_on_listing_day, currency, pair_address, token_address, chain, released, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)')
-        .run('rwa','RWA Demo','RWA1',10,12,now,now,now,now,1,'USD',null,null,null,'active',now,now);
+        .run('rwa', 'RWA Demo', 'RWA1', 10, 12, now, now, now, now, 1, 'USD', null, null, null, 'active', now, now);
     }
-    const bt = db.prepare('SELECT id FROM block_trades WHERE market = ? AND symbol = ? AND status = ?').get('us','AAPL','active');
+    const bt = db.prepare('SELECT id FROM block_trades WHERE market = ? AND symbol = ? AND status = ?').get('us', 'AAPL', 'active');
     let btId = bt?.id || null;
     if (!btId) {
       const info = db.prepare('INSERT INTO block_trades (market, symbol, price, min_qty, start_at, end_at, lock_until, subscribe_key, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run('us','AAPL',180,50,'','','','demo','active',now,now);
+        .run('us', 'AAPL', 180, 50, '', '', '', 'demo', 'active', now, now);
       btId = info.lastInsertRowid;
     }
     const cus = db.prepare('SELECT id FROM users WHERE phone = ?').get('15500000001');
@@ -2805,7 +2831,7 @@ app.post('/api/dev/seed/sample', (req, res) => {
     const fRow = db.prepare('SELECT id, tiers FROM funds WHERE code = ?').get('MXF1');
     if (fRow) {
       let tiers = [];
-      try { tiers = JSON.parse(fRow.tiers || '[]'); } catch {}
+      try { tiers = JSON.parse(fRow.tiers || '[]'); } catch { }
       const match = tiers.find(t => Number(t.price) === 100);
       const fo = db.prepare('SELECT id FROM fund_orders WHERE user_id = ? AND fund_id = ? AND code = ? AND price = ?').get(uid, fRow.id, 'MXF1', 100);
       if (!fo && match) {
@@ -2830,11 +2856,11 @@ app.post('/api/dev/seed/sample', (req, res) => {
       const bo = db.prepare('SELECT id FROM block_trade_orders WHERE user_id = ? AND block_trade_id = ?').get(uid, btId);
       if (!bo) {
         const info = db.prepare('INSERT INTO block_trade_orders (block_trade_id, user_id, price, qty, amount, status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(btId, uid, 180, 50, 180*50, 'submitted', now);
+          .run(btId, uid, 180, 50, 180 * 50, 'submitted', now);
         const bid = info.lastInsertRowid;
         const btRow = db.prepare('SELECT market, lock_until FROM block_trades WHERE id = ?').get(btId);
         db.prepare('UPDATE block_trade_orders SET status=?, approved_at=?, lock_until=?, locked=? WHERE id=?').run('approved', now, btRow?.lock_until || null, 1, bid);
-        try { upsertBalance(uid, currencyForMarket('us'), -(180*50)); } catch {}
+        try { upsertBalance(uid, currencyForMarket('us'), -(180 * 50)); } catch { }
       }
     }
     const count = (sql) => { try { const r = db.prepare(sql).get(); return r ? (typeof r.c !== 'undefined' ? r.c : (Object.values(r)[0] || 0)) : 0; } catch { return -1; } };
@@ -2867,20 +2893,20 @@ app.get('/api/dev/seed/sample', (req, res) => {
     }
     const f = db.prepare('SELECT id FROM funds WHERE code = ?').get('MXF1');
     if (!f) {
-      const tiers = JSON.stringify([{price:100,percent:6},{price:500,percent:7},{price:1000,percent:8},{price:5000,percent:10}]);
+      const tiers = JSON.stringify([{ price: 100, percent: 6 }, { price: 500, percent: 7 }, { price: 1000, percent: 8 }, { price: 5000, percent: 10 }]);
       db.prepare('INSERT INTO funds (code, name_es, name_en, desc_es, desc_en, tiers, dividend, redeem_days, currency, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run('MXF1','Fondo Demo','Demo Fund','', '', tiers, 'month', 7, 'MXN', 'active', now, now);
+        .run('MXF1', 'Fondo Demo', 'Demo Fund', '', '', tiers, 'month', 7, 'MXN', 'active', now, now);
     }
     const ipo = db.prepare('SELECT id FROM ipo_items WHERE code = ?').get('RWA1');
     if (!ipo) {
       db.prepare('INSERT INTO ipo_items (kind, name, code, subscribe_price, list_price, issue_at, subscribe_at, subscribe_end_at, list_at, can_sell_on_listing_day, currency, pair_address, token_address, chain, released, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)')
-        .run('rwa','RWA Demo','RWA1',10,12,now,now,now,now,1,'USD',null,null,null,'active',now,now);
+        .run('rwa', 'RWA Demo', 'RWA1', 10, 12, now, now, now, now, 1, 'USD', null, null, null, 'active', now, now);
     }
-    const bt = db.prepare('SELECT id FROM block_trades WHERE market = ? AND symbol = ? AND status = ?').get('us','AAPL','active');
+    const bt = db.prepare('SELECT id FROM block_trades WHERE market = ? AND symbol = ? AND status = ?').get('us', 'AAPL', 'active');
     let btId = bt?.id || null;
     if (!btId) {
       const info = db.prepare('INSERT INTO block_trades (market, symbol, price, min_qty, start_at, end_at, lock_until, subscribe_key, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run('us','AAPL',180,50,'','','','demo','active',now,now);
+        .run('us', 'AAPL', 180, 50, '', '', '', 'demo', 'active', now, now);
       btId = info.lastInsertRowid;
     }
     const cus = db.prepare('SELECT id FROM users WHERE phone = ?').get('15500000001');
@@ -2903,7 +2929,7 @@ app.get('/api/dev/seed/sample', (req, res) => {
     const fRow = db.prepare('SELECT id, tiers FROM funds WHERE code = ?').get('MXF1');
     if (fRow) {
       let tiers = [];
-      try { tiers = JSON.parse(fRow.tiers || '[]'); } catch {}
+      try { tiers = JSON.parse(fRow.tiers || '[]'); } catch { }
       const match = tiers.find(t => Number(t.price) === 100);
       const fo = db.prepare('SELECT id FROM fund_orders WHERE user_id = ? AND fund_id = ? AND code = ? AND price = ?').get(uid, fRow.id, 'MXF1', 100);
       if (!fo && match) {
@@ -2928,11 +2954,11 @@ app.get('/api/dev/seed/sample', (req, res) => {
       const bo = db.prepare('SELECT id FROM block_trade_orders WHERE user_id = ? AND block_trade_id = ?').get(uid, btId);
       if (!bo) {
         const info = db.prepare('INSERT INTO block_trade_orders (block_trade_id, user_id, price, qty, amount, status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(btId, uid, 180, 50, 180*50, 'submitted', now);
+          .run(btId, uid, 180, 50, 180 * 50, 'submitted', now);
         const bid = info.lastInsertRowid;
         const btRow = db.prepare('SELECT market, lock_until FROM block_trades WHERE id = ?').get(btId);
         db.prepare('UPDATE block_trade_orders SET status=?, approved_at=?, lock_until=?, locked=? WHERE id=?').run('approved', now, btRow?.lock_until || null, 1, bid);
-        try { upsertBalance(uid, currencyForMarket('us'), -(180*50)); } catch {}
+        try { upsertBalance(uid, currencyForMarket('us'), -(180 * 50)); } catch { }
       }
     }
     const count = (sql) => { try { const r = db.prepare(sql).get(); return r ? (typeof r.c !== 'undefined' ? r.c : (Object.values(r)[0] || 0)) : 0; } catch { return -1; } };
@@ -2967,15 +2993,15 @@ app.get('/api/admin/trade/fund/list', requireRoles(adminReadRoles()), (req, res)
 });
 
 // ---- Admin: Fund create ----
-app.post('/api/admin/trade/fund/create', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/fund/create', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { nameEs, nameEn, code, descEs = '', descEn = '', tiers = [], dividend, redeemDays, currency = 'MXN' } = req.body || {};
     const c = String(code || '').trim().toUpperCase();
     const dv = String(dividend || '').trim().toLowerCase();
     const cur = String(currency || '').trim().toUpperCase();
     if (!c || !nameEs || !nameEn) return res.status(400).json({ error: 'invalid payload' });
-    if (!['day','week','month'].includes(dv)) return res.status(400).json({ error: 'bad dividend' });
-    if (!['MXN','USD'].includes(cur)) return res.status(400).json({ error: 'bad currency' });
+    if (!['day', 'week', 'month'].includes(dv)) return res.status(400).json({ error: 'bad dividend' });
+    if (!['MXN', 'USD'].includes(cur)) return res.status(400).json({ error: 'bad currency' });
     if (!Array.isArray(tiers) || tiers.length !== 4) return res.status(400).json({ error: 'tiers need 4 items' });
     for (const t of tiers) {
       if (!Number.isFinite(Number(t?.price)) || Number(t.price) <= 0) return res.status(400).json({ error: 'bad tier price' });
@@ -2989,25 +3015,25 @@ app.post('/api/admin/trade/fund/create', requireRoles(['super','admin']), (req, 
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
-app.post('/api/admin/trade/fund/:id/update', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/fund/:id/update', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const { nameEs, nameEn, code, descEs = '', descEn = '', tiers, dividend, redeemDays, currency } = req.body || {};
     const c = String(code || '').trim().toUpperCase();
     if (!c || !nameEs || !nameEn) return res.status(400).json({ error: 'invalid payload' });
-    if (!['day','week','month'].includes(String(dividend))) return res.status(400).json({ error: 'bad dividend' });
+    if (!['day', 'week', 'month'].includes(String(dividend))) return res.status(400).json({ error: 'bad dividend' });
     if (!Number.isFinite(Number(redeemDays)) || Number(redeemDays) < 0) return res.status(400).json({ error: 'bad redeemDays' });
     const tiersStr = JSON.stringify(Array.isArray(tiers) ? tiers : []);
     const now = new Date().toISOString();
     db.prepare('UPDATE funds SET code=?, name_es=?, name_en=?, desc_es=?, desc_en=?, tiers=?, dividend=?, redeem_days=?, currency=?, updated_at=? WHERE id=?')
-      .run(c, String(nameEs||''), String(nameEn||''), String(descEs||''), String(descEn||''), tiersStr, String(dividend), Number(redeemDays), String(currency||'MXN'), now, id);
+      .run(c, String(nameEs || ''), String(nameEn || ''), String(descEs || ''), String(descEn || ''), tiersStr, String(dividend), Number(redeemDays), String(currency || 'MXN'), now, id);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
-app.delete('/api/admin/trade/fund/:id', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/trade/fund/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3031,7 +3057,7 @@ app.get('/api/admin/trade/fund/orders', requireRoles(adminReadRoles()), (req, re
       const extra = [];
       const params = [status];
       if (phone) { extra.push('u.phone = ?'); params.push(phone); }
-      if (String(req.user?.role||'') === 'operator') { operatorId = Number(req.user.id || 0); }
+      if (String(req.user?.role || '') === 'operator') { operatorId = Number(req.user.id || 0); }
       if (operatorId !== null) { extra.push('u.assigned_operator_id = ?'); params.push(operatorId); }
       if (adminId !== null) { extra.push('u.assigned_admin_id = ?'); params.push(adminId); }
       if (extra.length) base += ' AND ' + extra.join(' AND ');
@@ -3042,7 +3068,7 @@ app.get('/api/admin/trade/fund/orders', requireRoles(adminReadRoles()), (req, re
         let lock_until = null, lock_until_ts = null;
         if (r.approved_at) { const d = new Date(r.approved_at); d.setDate(d.getDate() + Number(r.redeem_days || 0)); lock_until = d.toISOString(); lock_until_ts = d.getTime(); }
         let next_payout_ts = null; if (r.next_payout_at) { const nd = new Date(r.next_payout_at); if (!isNaN(nd.getTime())) next_payout_ts = nd.getTime(); }
-        return { id: r.id, userId: r.userId, userName: r.userName, phone: r.phone || '', code: r.code, price: r.price, percent: r.percent, qty: Number(r.qty||1), submitted_at: r.submitted_at, approved_at: r.approved_at, status: r.status, forced_unlocked: Number(r.forced_unlocked||0)===1, lock_until, lock_until_ts, last_payout_at: r.last_payout_at || null, next_payout_at: r.next_payout_at || null, next_payout_ts };
+        return { id: r.id, userId: r.userId, userName: r.userName, phone: r.phone || '', code: r.code, price: r.price, percent: r.percent, qty: Number(r.qty || 1), submitted_at: r.submitted_at, approved_at: r.approved_at, status: r.status, forced_unlocked: Number(r.forced_unlocked || 0) === 1, lock_until, lock_until_ts, last_payout_at: r.last_payout_at || null, next_payout_at: r.next_payout_at || null, next_payout_ts };
       });
       res.json({ items, total });
     } else {
@@ -3050,7 +3076,7 @@ app.get('/api/admin/trade/fund/orders', requireRoles(adminReadRoles()), (req, re
       const extra = [];
       const params = [];
       if (phone) { extra.push('u.phone = ?'); params.push(phone); }
-      if (String(req.user?.role||'') === 'operator') { operatorId = Number(req.user.id || 0); }
+      if (String(req.user?.role || '') === 'operator') { operatorId = Number(req.user.id || 0); }
       if (operatorId !== null) { extra.push('u.assigned_operator_id = ?'); params.push(operatorId); }
       if (adminId !== null) { extra.push('u.assigned_admin_id = ?'); params.push(adminId); }
       if (extra.length) base += ' WHERE ' + extra.join(' AND ');
@@ -3061,7 +3087,7 @@ app.get('/api/admin/trade/fund/orders', requireRoles(adminReadRoles()), (req, re
         let lock_until = null, lock_until_ts = null;
         if (r.approved_at) { const d = new Date(r.approved_at); d.setDate(d.getDate() + Number(r.redeem_days || 0)); lock_until = d.toISOString(); lock_until_ts = d.getTime(); }
         let next_payout_ts = null; if (r.next_payout_at) { const nd = new Date(r.next_payout_at); if (!isNaN(nd.getTime())) next_payout_ts = nd.getTime(); }
-        return { id: r.id, userId: r.userId, userName: r.userName, phone: r.phone || '', code: r.code, price: r.price, percent: r.percent, qty: Number(r.qty||1), submitted_at: r.submitted_at, approved_at: r.approved_at, status: r.status, forced_unlocked: Number(r.forced_unlocked||0)===1, lock_until, lock_until_ts, last_payout_at: r.last_payout_at || null, next_payout_at: r.next_payout_at || null, next_payout_ts };
+        return { id: r.id, userId: r.userId, userName: r.userName, phone: r.phone || '', code: r.code, price: r.price, percent: r.percent, qty: Number(r.qty || 1), submitted_at: r.submitted_at, approved_at: r.approved_at, status: r.status, forced_unlocked: Number(r.forced_unlocked || 0) === 1, lock_until, lock_until_ts, last_payout_at: r.last_payout_at || null, next_payout_at: r.next_payout_at || null, next_payout_ts };
       });
       res.json({ items, total });
     }
@@ -3084,36 +3110,36 @@ function nextCycle(ts, dividend) {
 }
 
 // ---- Admin: Fund order approve ----
-app.post('/api/admin/trade/fund/orders/:id/approve', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/trade/fund/orders/:id/approve', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const order = db.prepare('SELECT id, user_id, fund_id, code, price, percent, qty, status FROM fund_orders WHERE id = ?').get(id);
     if (!order || order.status !== 'submitted') return res.status(404).json({ error: 'not submitted' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(order.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
     const fund = db.prepare('SELECT id, dividend, redeem_days, currency FROM funds WHERE id = ?').get(order.fund_id);
     if (!fund) return res.status(404).json({ error: 'fund not found' });
-  const now = new Date().toISOString();
-  const next = nextCycle(now, fund.dividend);
-  db.prepare('UPDATE fund_orders SET status=?, approved_at=?, next_payout_at=? WHERE id=?').run('approved', now, next, id);
-  res.json({ ok: true });
+    const now = new Date().toISOString();
+    const next = nextCycle(now, fund.dividend);
+    db.prepare('UPDATE fund_orders SET status=?, approved_at=?, next_payout_at=? WHERE id=?').run('approved', now, next, id);
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
 // ---- Admin: Fund order reject ----
-app.post('/api/admin/trade/fund/orders/:id/reject', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/trade/fund/orders/:id/reject', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const { notes = '' } = req.body || {};
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const order = db.prepare('SELECT id, user_id, status FROM fund_orders WHERE id = ?').get(id);
     if (!order || order.status !== 'submitted') return res.status(404).json({ error: 'not submitted' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(order.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
@@ -3135,7 +3161,7 @@ app.post('/api/me/fund/redeem', requireAuth, (req, res) => {
     const fund = db.prepare('SELECT id, redeem_days, currency FROM funds WHERE id = ?').get(order.fund_id);
     if (!fund) return res.status(404).json({ error: 'fund not found' });
     const unlockAt = addDays(order.approved_at, Number(fund.redeem_days || 0));
-    if (Number(order.forced_unlocked||0) !== 1 && new Date(unlockAt) > new Date()) return res.status(400).json({ error: 'locked' });
+    if (Number(order.forced_unlocked || 0) !== 1 && new Date(unlockAt) > new Date()) return res.status(400).json({ error: 'locked' });
     upsertBalance(order.user_id, String(fund.currency || 'MXN'), Number(order.price));
     db.prepare('UPDATE fund_orders SET status=? WHERE id=?').run('redeemed', id);
     res.json({ ok: true });
@@ -3145,7 +3171,7 @@ app.post('/api/me/fund/redeem', requireAuth, (req, res) => {
 });
 
 // ---- Admin: Fund order lock/unlock/delete ----
-app.post('/api/admin/trade/fund/orders/:id/unlock', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/fund/orders/:id/unlock', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3155,7 +3181,7 @@ app.post('/api/admin/trade/fund/orders/:id/unlock', requireRoles(['super','admin
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
-app.post('/api/admin/trade/fund/orders/:id/lock', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/fund/orders/:id/lock', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3165,7 +3191,7 @@ app.post('/api/admin/trade/fund/orders/:id/lock', requireRoles(['super','admin']
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
-app.delete('/api/admin/trade/fund/orders/:id', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/trade/fund/orders/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3188,67 +3214,67 @@ setInterval(() => {
         const codeRow = db.prepare('SELECT code FROM funds WHERE id = ?').get(o.fund_id);
         const code = String(codeRow?.code || '');
         db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
-          .run(o.user_id, '基金配息已到账', `你的 ${code} 配息已到账 ${String(fund.currency||'MXN')} ${Number(amount).toFixed(2)}`, new Date().toISOString());
-      } catch {}
+          .run(o.user_id, '基金配息已到账', `你的 ${code} 配息已到账 ${String(fund.currency || 'MXN')} ${Number(amount).toFixed(2)}`, new Date().toISOString());
+      } catch { }
       const next = nextCycle(now, fund.dividend);
       db.prepare('UPDATE fund_orders SET last_payout_at=?, next_payout_at=? WHERE id=?').run(now, next, o.id);
     }
-  } catch {}
+  } catch { }
 }, 60 * 1000);
 
 // Admin: run fund payout scheduler once (manual trigger)
-app.post('/api/admin/trade/fund/payout/run', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/fund/payout/run', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const now = new Date().toISOString();
     const due = db.prepare('SELECT fo.id, fo.user_id, fo.fund_id, fo.price, fo.percent, fo.next_payout_at FROM fund_orders fo WHERE fo.status = ? AND fo.next_payout_at <= ?').all('approved', now);
     let count = 0;
-  for (const o of due) {
-    const fund = db.prepare('SELECT id, dividend, currency FROM funds WHERE id = ?').get(o.fund_id);
-    if (!fund) continue;
-    const amount = Number(o.price) * Number(o.percent) / 100;
-    upsertBalance(o.user_id, String(fund.currency || 'MXN'), amount);
-    try {
-      const codeRow = db.prepare('SELECT code FROM funds WHERE id = ?').get(o.fund_id);
-      const code = String(codeRow?.code || '');
-      db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
-        .run(o.user_id, '基金配息已到账', `你的 ${code} 配息已到账 ${String(fund.currency||'MXN')} ${Number(amount).toFixed(2)}`, new Date().toISOString());
-    } catch {}
-    try {
-      const inviterId = db.prepare('SELECT invited_by_user_id FROM users WHERE id = ?').get(o.user_id)?.invited_by_user_id || null;
-      if (inviterId) {
-        const s = getCommissionSettings();
-        const pct = Number(s.fundPct || 0);
-        const freezeDays = Number(s.fundFreezeDays || 0);
-        const commissionAmt = Number(((amount * pct) / 100).toFixed(2));
-        const frozenUntil = new Date(Date.now() + Math.max(0, freezeDays) * 24 * 3600 * 1000).toISOString();
-        db.prepare('INSERT INTO commission_records (inviter_id, invitee_id, source, order_id, currency, amount, status, frozen_until, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(Number(inviterId), Number(o.user_id), 'fund', o.id, String(fund.currency || 'MXN'), commissionAmt, freezeDays > 0 ? 'frozen' : 'released', freezeDays > 0 ? frozenUntil : null, new Date().toISOString());
-        if (freezeDays <= 0) upsertCommissionBalance(Number(inviterId), String(fund.currency || 'MXN'), commissionAmt);
-      }
-    } catch {}
-    const next = nextCycle(now, fund.dividend);
-    db.prepare('UPDATE fund_orders SET last_payout_at=?, next_payout_at=? WHERE id=?').run(now, next, o.id);
-    count++;
-  }
+    for (const o of due) {
+      const fund = db.prepare('SELECT id, dividend, currency FROM funds WHERE id = ?').get(o.fund_id);
+      if (!fund) continue;
+      const amount = Number(o.price) * Number(o.percent) / 100;
+      upsertBalance(o.user_id, String(fund.currency || 'MXN'), amount);
+      try {
+        const codeRow = db.prepare('SELECT code FROM funds WHERE id = ?').get(o.fund_id);
+        const code = String(codeRow?.code || '');
+        db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
+          .run(o.user_id, '基金配息已到账', `你的 ${code} 配息已到账 ${String(fund.currency || 'MXN')} ${Number(amount).toFixed(2)}`, new Date().toISOString());
+      } catch { }
+      try {
+        const inviterId = db.prepare('SELECT invited_by_user_id FROM users WHERE id = ?').get(o.user_id)?.invited_by_user_id || null;
+        if (inviterId) {
+          const s = getCommissionSettings();
+          const pct = Number(s.fundPct || 0);
+          const freezeDays = Number(s.fundFreezeDays || 0);
+          const commissionAmt = Number(((amount * pct) / 100).toFixed(2));
+          const frozenUntil = new Date(Date.now() + Math.max(0, freezeDays) * 24 * 3600 * 1000).toISOString();
+          db.prepare('INSERT INTO commission_records (inviter_id, invitee_id, source, order_id, currency, amount, status, frozen_until, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(Number(inviterId), Number(o.user_id), 'fund', o.id, String(fund.currency || 'MXN'), commissionAmt, freezeDays > 0 ? 'frozen' : 'released', freezeDays > 0 ? frozenUntil : null, new Date().toISOString());
+          if (freezeDays <= 0) upsertCommissionBalance(Number(inviterId), String(fund.currency || 'MXN'), commissionAmt);
+        }
+      } catch { }
+      const next = nextCycle(now, fund.dividend);
+      db.prepare('UPDATE fund_orders SET last_payout_at=?, next_payout_at=? WHERE id=?').run(now, next, o.id);
+      count++;
+    }
     res.json({ ok: true, processed: count });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
-  try {
-    const cols = db.prepare("PRAGMA table_info(fund_orders)").all().map(r => String(r.name));
-    if (!cols.includes('qty')) {
-      try { db.exec('ALTER TABLE fund_orders ADD COLUMN qty REAL;'); } catch {}
-    }
-    if (!cols.includes('forced_unlocked')) {
-      try { db.exec('ALTER TABLE fund_orders ADD COLUMN forced_unlocked INTEGER DEFAULT 0;'); } catch {}
-    }
-  } catch {}
+try {
+  const cols = db.prepare("PRAGMA table_info(fund_orders)").all().map(r => String(r.name));
+  if (!cols.includes('qty')) {
+    try { db.exec('ALTER TABLE fund_orders ADD COLUMN qty REAL;'); } catch { }
+  }
+  if (!cols.includes('forced_unlocked')) {
+    try { db.exec('ALTER TABLE fund_orders ADD COLUMN forced_unlocked INTEGER DEFAULT 0;'); } catch { }
+  }
+} catch { }
 // ---- Me: Funds list ----
 app.get('/api/me/funds', requireAuth, (req, res) => {
   try {
     const items = db.prepare('SELECT code, name_es AS nameEs, name_en AS nameEn, desc_es AS descEs, desc_en AS descEn, tiers, currency, dividend FROM funds WHERE status = ? ORDER BY id DESC').all('active');
     const mapped = items.map(it => {
       let tiers = [];
-      try { tiers = JSON.parse(it.tiers || '[]'); } catch {}
+      try { tiers = JSON.parse(it.tiers || '[]'); } catch { }
       const price = Number(tiers[0]?.price || 0);
       const p1 = Number(tiers[0]?.percent || 0);
       const p2 = Number(tiers[1]?.percent || 0);
@@ -3271,7 +3297,7 @@ app.post('/api/me/fund/subscribe', requireAuth, (req, res) => {
     const fund = db.prepare('SELECT id, tiers FROM funds WHERE code = ? AND status = ?').get(c, 'active');
     if (fund) {
       let tiers = [];
-      try { tiers = JSON.parse(fund.tiers || '[]'); } catch {}
+      try { tiers = JSON.parse(fund.tiers || '[]'); } catch { }
       const match = tiers.find(t => Number(t.price) === Number(price));
       if (!match) return res.status(400).json({ error: 'price not in tiers', code: 2003 });
       const now = new Date().toISOString();
@@ -3340,7 +3366,7 @@ app.post('/api/me/exchange', requireAuth, (req, res) => {
     const f = String(from || '').trim().toUpperCase();
     const t = String(to || '').trim().toUpperCase();
     const a = Number(amount);
-    if (!['MXN','USD','USDT'].includes(f) || !['MXN','USD','USDT'].includes(t) || f === t) return res.status(400).json({ error: 'bad pair' });
+    if (!['MXN', 'USD', 'USDT'].includes(f) || !['MXN', 'USD', 'USDT'].includes(t) || f === t) return res.status(400).json({ error: 'bad pair' });
     if (!Number.isFinite(a) || a <= 0) return res.status(400).json({ error: 'bad amount' });
     const rate = 1; // 占位：当前不做汇率转换，后续可接行情
     const uid = Number(req.user.id);
@@ -3376,7 +3402,7 @@ app.post('/api/me/kyc/submit', requireAuth, (req, res) => {
     const payload = JSON.stringify(payloadObj);
     const now = new Date().toISOString();
     db.prepare('INSERT INTO kyc_requests (user_id, status, payload, submitted_at) VALUES (?, ?, ?, ?)').run(uid, 'submitted', payload, now);
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(uid, 'KYC 提交成功', '你的实名审核已提交，正在处理中', now); } catch {}
+    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(uid, 'KYC 提交成功', '你的实名审核已提交，正在处理中', now); } catch { }
     res.status(202).json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
@@ -3384,7 +3410,7 @@ app.post('/api/me/kyc/submit', requireAuth, (req, res) => {
 });
 
 // ---- Admin: KYC notify ----
-app.post('/api/admin/kyc/notify', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/kyc/notify', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { userId, status, notes } = req.body || {};
     const uid = Number(userId);
@@ -3393,7 +3419,7 @@ app.post('/api/admin/kyc/notify', requireRoles(['super','admin']), (req, res) =>
     db.prepare('UPDATE kyc_requests SET status=?, reviewed_at=?, notes=? WHERE user_id=? AND status != ?').run(String(status), now, String(notes || ''), uid, String(status));
     const title = 'KYC 审核结果';
     const msg = `你的实名审核结果：${status}${notes ? '（' + String(notes) + '）' : ''}`;
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(uid, title, msg, now); } catch {}
+    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(uid, title, msg, now); } catch { }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
@@ -3429,7 +3455,7 @@ app.get('/api/admin/kyc/list', requireRoles(adminReadRoles()), (req, res) => {
     if (from) { where.push('kr.submitted_at >= ?'); params.push(from); }
     if (to) { where.push('kr.submitted_at <= ?'); params.push(to); }
     if (q) { where.push('(u.phone = ? OR u.name LIKE ?)'); params.push(q, `%${q}%`); }
-    if (String(req.user?.role||'') === 'operator') { where.push('u.assigned_operator_id = ?'); params.push(Number(req.user.id || 0)); }
+    if (String(req.user?.role || '') === 'operator') { where.push('u.assigned_operator_id = ?'); params.push(Number(req.user.id || 0)); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const rows = db.prepare(`SELECT kr.id, kr.user_id AS userId, u.name AS userName, u.phone AS phone, kr.submitted_at, kr.status, kr.payload FROM kyc_requests kr JOIN users u ON kr.user_id = u.id ${whereSql} ORDER BY kr.submitted_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
     const items = rows.map(r => {
@@ -3446,7 +3472,7 @@ app.get('/api/admin/kyc/list', requireRoles(adminReadRoles()), (req, res) => {
         const img0 = String(pl?.imageData || pl?.photo || pl?.image || '').trim();
         const arr = Array.isArray(pl?.photos) ? pl.photos : (img0 ? [{ url: img0, thumbUrl: img0 }] : []);
         photos = arr.map(p => ({ id: p?.id || null, thumbUrl: p?.thumbUrl || p?.url || '', url: p?.url || '' }));
-      } catch {}
+      } catch { }
       return { id: r.id, userId: r.userId, userName: r.userName, phone: r.phone, submitted_at: r.submitted_at, status: r.status, fields, photos };
     });
     const total = db.prepare(`SELECT COUNT(1) AS c FROM kyc_requests kr JOIN users u ON kr.user_id = u.id ${whereSql}`).get(...params)?.c || 0;
@@ -3457,20 +3483,20 @@ app.get('/api/admin/kyc/list', requireRoles(adminReadRoles()), (req, res) => {
 });
 
 // ---- Admin: KYC approve ----
-app.post('/api/admin/kyc/approve', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/kyc/approve', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const { id } = req.body || {};
     const rid = Number(id);
     if (!Number.isFinite(rid)) return res.status(400).json({ error: 'bad id' });
     const row = db.prepare('SELECT id, user_id, status FROM kyc_requests WHERE id = ?').get(rid);
     if (!row) return res.status(404).json({ error: 'not found' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(row.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
     const now = new Date().toISOString();
     db.prepare('UPDATE kyc_requests SET status=?, reviewed_at=? WHERE id=?').run('approved', now, rid);
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(row.user_id, 'KYC 审核通过', '你的实名审核已通过', now); } catch {}
+    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(row.user_id, 'KYC 审核通过', '你的实名审核已通过', now); } catch { }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
@@ -3478,20 +3504,20 @@ app.post('/api/admin/kyc/approve', requireRoles(['super','admin','operator']), (
 });
 
 // ---- Admin: KYC reject ----
-app.post('/api/admin/kyc/reject', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/kyc/reject', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const { id, notes = '' } = req.body || {};
     const rid = Number(id);
     if (!Number.isFinite(rid)) return res.status(400).json({ error: 'bad id' });
     const row = db.prepare('SELECT id, user_id, status FROM kyc_requests WHERE id = ?').get(rid);
     if (!row) return res.status(404).json({ error: 'not found' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(row.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
     const now = new Date().toISOString();
     db.prepare('UPDATE kyc_requests SET status=?, reviewed_at=?, notes=? WHERE id=?').run('rejected', now, String(notes || ''), rid);
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(row.user_id, 'KYC 审核未通过', `原因：${String(notes || '')}`, now); } catch {}
+    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(row.user_id, 'KYC 审核未通过', `原因：${String(notes || '')}`, now); } catch { }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
@@ -3543,7 +3569,7 @@ app.get('/api/admin/trade/ipo/lookup', requireRoles(adminReadRoles()), (req, res
 });
 
 // ---- Admin: IPO release ----
-app.post('/api/admin/trade/ipo/release/:id', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/ipo/release/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3555,11 +3581,11 @@ app.post('/api/admin/trade/ipo/release/:id', requireRoles(['super','admin']), (r
 });
 
 // ---- Admin: IPO create ----
-app.post('/api/admin/trade/ipo/create', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/ipo/create', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { kind, name, code, subscribePrice, listPrice = null, issueAt, subscribeAt, subscribeEndAt = null, listAt = null, canSellOnListingDay, currency = 'USD', pairAddress = null, tokenAddress = null, chain = null } = req.body || {};
     const kd = String(kind || '').trim().toLowerCase();
-    if (!['ipo','rwa'].includes(kd)) return res.status(400).json({ error: 'bad kind' });
+    if (!['ipo', 'rwa'].includes(kd)) return res.status(400).json({ error: 'bad kind' });
     const c = String(code || '').trim().toUpperCase();
     if (!c || !name || !Number.isFinite(Number(subscribePrice)) || Number(subscribePrice) <= 0) return res.status(400).json({ error: 'invalid payload' });
     const now = new Date().toISOString();
@@ -3570,7 +3596,7 @@ app.post('/api/admin/trade/ipo/create', requireRoles(['super','admin']), (req, r
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
-app.post('/api/admin/trade/ipo/:id/update', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/ipo/:id/update', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3588,7 +3614,7 @@ app.post('/api/admin/trade/ipo/:id/update', requireRoles(['super','admin']), (re
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
-app.delete('/api/admin/trade/ipo/:id', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/trade/ipo/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3612,7 +3638,7 @@ app.get('/api/admin/trade/ipo/orders', requireRoles(adminReadRoles()), (req, res
       let base = 'SELECT io.id, io.user_id AS userId, u.name AS userName, u.phone AS phone, io.code, io.qty, io.submitted_at AS submitted_at, io.status FROM ipo_orders io JOIN users u ON io.user_id = u.id WHERE io.status = ?';
       const extra = [];
       const params = [status];
-      if (String(req.user?.role||'') === 'operator') { operatorId = Number(req.user.id || 0); }
+      if (String(req.user?.role || '') === 'operator') { operatorId = Number(req.user.id || 0); }
       if (operatorId !== null) { extra.push('u.assigned_operator_id = ?'); params.push(operatorId); }
       if (adminId !== null) { extra.push('u.assigned_admin_id = ?'); params.push(adminId); }
       if (extra.length) base += ' AND ' + extra.join(' AND ');
@@ -3623,7 +3649,7 @@ app.get('/api/admin/trade/ipo/orders', requireRoles(adminReadRoles()), (req, res
       let base = 'SELECT io.id, io.user_id AS userId, u.name AS userName, u.phone AS phone, io.code, io.qty, io.submitted_at AS submitted_at, io.status FROM ipo_orders io JOIN users u ON io.user_id = u.id';
       const extra = [];
       const params = [];
-      if (String(req.user?.role||'') === 'operator') { operatorId = Number(req.user.id || 0); }
+      if (String(req.user?.role || '') === 'operator') { operatorId = Number(req.user.id || 0); }
       if (operatorId !== null) { extra.push('u.assigned_operator_id = ?'); params.push(operatorId); }
       if (adminId !== null) { extra.push('u.assigned_admin_id = ?'); params.push(adminId); }
       if (extra.length) base += ' WHERE ' + extra.join(' AND ');
@@ -3642,18 +3668,18 @@ function updateTradingDisallowFlag(userId) {
     const usd = db.prepare('SELECT amount FROM balances WHERE user_id = ? AND currency = ?').get(userId, 'USD')?.amount || 0;
     const flag = Number(usd) < 0 ? 1 : 0;
     db.prepare('UPDATE users SET disallow_trading=?, updated_at=? WHERE id=?').run(flag, new Date().toISOString(), userId);
-  } catch {}
+  } catch { }
 }
 
 // ---- Admin: IPO order approve ----
-app.post('/api/admin/trade/ipo/orders/:id/approve', requireRoles(['super','admin','operator']), async (req, res) => {
+app.post('/api/admin/trade/ipo/orders/:id/approve', requireRoles(['super', 'admin', 'operator']), async (req, res) => {
   try {
     const id = Number(req.params.id);
     const { qty } = req.body || {};
     if (!Number.isFinite(id) || !Number.isFinite(Number(qty)) || Number(qty) <= 0) return res.status(400).json({ error: 'invalid payload' });
     const order = db.prepare('SELECT id, user_id, item_id, code, qty, price, status FROM ipo_orders WHERE id = ?').get(id);
     if (!order || order.status !== 'submitted') return res.status(404).json({ error: 'not submitted' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(order.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
@@ -3666,8 +3692,8 @@ app.post('/api/admin/trade/ipo/orders/:id/approve', requireRoles(['super','admin
     upsertBalance(order.user_id, 'MXN', -mxnCost, 'ipo_approve');
     updateTradingDisallowFlag(order.user_id);
     db.prepare('UPDATE ipo_orders SET qty=?, approved_at=?, status=? WHERE id=?').run(useQty, now, 'approved', id);
-    try { db.prepare('INSERT INTO notifications (user_id, message, created_at, read) VALUES (?, ?, ?, 0)').run(order.user_id, `你的IPO申购已审批通过，数量 ${useQty}`, now); } catch {}
-    try { db.prepare('SELECT code FROM ipo_items WHERE id = ?').get(order.item_id); } catch {}
+    try { db.prepare('INSERT INTO notifications (user_id, message, created_at, read) VALUES (?, ?, ?, 0)').run(order.user_id, `你的IPO申购已审批通过，数量 ${useQty}`, now); } catch { }
+    try { db.prepare('SELECT code FROM ipo_items WHERE id = ?').get(order.item_id); } catch { }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
@@ -3675,14 +3701,14 @@ app.post('/api/admin/trade/ipo/orders/:id/approve', requireRoles(['super','admin
 });
 
 // ---- Admin: IPO order reject ----
-app.post('/api/admin/trade/ipo/orders/:id/reject', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/trade/ipo/orders/:id/reject', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const { notes = '' } = req.body || {};
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
     const order = db.prepare('SELECT id, user_id, status FROM ipo_orders WHERE id = ?').get(id);
     if (!order || order.status !== 'submitted') return res.status(404).json({ error: 'not submitted' });
-    if (String(req.user?.role||'') === 'operator') {
+    if (String(req.user?.role || '') === 'operator') {
       const opId = db.prepare('SELECT assigned_operator_id AS opId FROM users WHERE id = ?').get(Number(order.user_id))?.opId || null;
       if (Number(opId || 0) !== Number(req.user.id || 0)) return res.status(403).json({ error: 'Forbidden' });
     }
@@ -3714,7 +3740,7 @@ app.post('/api/me/ipo/subscribe', requireAuth, async (req, res) => {
       const mxnCost = Number(q) * Number(item.subscribe_price) * Number(rate);
       const bal = db.prepare('SELECT amount FROM balances WHERE user_id = ? AND currency = ?').get(Number(req.user.id), 'MXN')?.amount || 0;
       if (Number(bal) < Number(mxnCost)) return res.status(400).json({ error: 'insufficient_funds_mxn', need: Number(mxnCost), have: Number(bal) });
-    } catch {}
+    } catch { }
     const now = new Date().toISOString();
     const info = db.prepare('INSERT INTO ipo_orders (user_id, item_id, code, qty, price, status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(Number(req.user.id), item.id, c, q, Number(item.subscribe_price), 'submitted', now);
@@ -3722,7 +3748,7 @@ app.post('/api/me/ipo/subscribe', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
-  });
+});
 
 // ---- Me: IPO sell ----
 app.post('/api/me/ipo/orders/:id/sell', requireAuth, (req, res) => {
@@ -3754,11 +3780,11 @@ app.post('/api/me/ipo/orders/:id/sell', requireAuth, (req, res) => {
         .run(Number(inviterId), Number(req.user.id), 'ipo', id, curr, amount, freezeDays > 0 ? 'frozen' : 'released', freezeDays > 0 ? frozenUntil : null, now.toISOString());
       if (freezeDays <= 0) upsertCommissionBalance(Number(inviterId), curr, amount);
     }
-    res.json({ ok:true });
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
- 
+
 function sanitizeIp(ip) {
   const s = String(ip || '').trim();
   const first = s.split(',')[0].trim();
@@ -3782,7 +3808,7 @@ function getCountryFromHeaders(req) {
   if (x) return x;
   return '';
 }
-  db.exec(`CREATE TABLE IF NOT EXISTS kyc_requests (
+db.exec(`CREATE TABLE IF NOT EXISTS kyc_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     status TEXT,
@@ -3792,12 +3818,12 @@ function getCountryFromHeaders(req) {
     notes TEXT
   );`);
 // ---- Admin: Balance recharge ----
-app.post('/api/admin/balances/recharge', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/balances/recharge', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { phone = '', userId = null, currency, amount } = req.body || {};
     const cur = String(currency || '').trim().toUpperCase();
     const amt = Number(amount);
-    if (!['MXN','USD','USDT'].includes(cur)) return res.status(400).json({ error: 'bad currency' });
+    if (!['MXN', 'USD', 'USDT'].includes(cur)) return res.status(400).json({ error: 'bad currency' });
     if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'bad amount' });
     let uid = Number(userId || 0);
     if (!Number.isFinite(uid) || uid <= 0) {
@@ -3806,15 +3832,15 @@ app.post('/api/admin/balances/recharge', requireRoles(['super','admin']), (req, 
       uid = Number(u.id);
     }
     upsertBalance(uid, cur, amt);
-    try { db.exec('CREATE TABLE IF NOT EXISTS balance_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, currency TEXT, amount REAL, reason TEXT, admin_id INTEGER, created_at TEXT)'); } catch {}
-    try { db.prepare('INSERT INTO balance_logs (user_id, currency, amount, reason, admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(uid, cur, amt, 'admin_recharge', Number(req.user.id), new Date().toISOString()); } catch {}
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(uid, '资金充值成功', `你已成功充值 ${cur} ${amt}`, new Date().toISOString()); } catch {}
+    try { db.exec('CREATE TABLE IF NOT EXISTS balance_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, currency TEXT, amount REAL, reason TEXT, admin_id INTEGER, created_at TEXT)'); } catch { }
+    try { db.prepare('INSERT INTO balance_logs (user_id, currency, amount, reason, admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(uid, cur, amt, 'admin_recharge', Number(req.user.id), new Date().toISOString()); } catch { }
+    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(uid, '资金充值成功', `你已成功充值 ${cur} ${amt}`, new Date().toISOString()); } catch { }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
 // ---- Admin: Balance logs ----
-app.get('/api/admin/balances/logs', requireRoles(['super','admin','operator']), (req, res) => {
+app.get('/api/admin/balances/logs', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const phone = String(req.query.phone || '').trim();
     const currency = String(req.query.currency || '').trim().toUpperCase();
@@ -3829,9 +3855,9 @@ app.get('/api/admin/balances/logs', requireRoles(['super','admin','operator']), 
     if (currency) { where.push('l.currency = ?'); params.push(currency); }
     if (from) { where.push('l.created_at >= ?'); params.push(from); }
     if (to) { where.push('l.created_at <= ?'); params.push(to); }
-    if (String(req.user?.role||'') === 'operator') { where.push('u.assigned_operator_id = ?'); params.push(Number(req.user.id || 0)); }
+    if (String(req.user?.role || '') === 'operator') { where.push('u.assigned_operator_id = ?'); params.push(Number(req.user.id || 0)); }
     const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
-    try { db.exec('CREATE TABLE IF NOT EXISTS balance_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, currency TEXT, amount REAL, reason TEXT, admin_id INTEGER, created_at TEXT)'); } catch {}
+    try { db.exec('CREATE TABLE IF NOT EXISTS balance_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, currency TEXT, amount REAL, reason TEXT, admin_id INTEGER, created_at TEXT)'); } catch { }
     const items = db.prepare(`SELECT l.id, l.user_id AS userId, u.name AS userName, u.phone, l.currency, l.amount, l.reason, l.admin_id AS adminId, s.name AS adminName, l.created_at
       FROM balance_logs l LEFT JOIN users u ON l.user_id = u.id LEFT JOIN users s ON s.id = l.admin_id ${whereSql} ORDER BY l.created_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
     const total = db.prepare(`SELECT COUNT(1) AS c FROM balance_logs l LEFT JOIN users u ON l.user_id = u.id LEFT JOIN users s ON s.id = l.admin_id ${whereSql}`).get(...params)?.c || 0;
@@ -3840,7 +3866,7 @@ app.get('/api/admin/balances/logs', requireRoles(['super','admin','operator']), 
 });
 
 // ---- Admin: Block Trade order lock/unlock/delete ----
-app.post('/api/admin/trade/block/orders/:id/lock', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/block/orders/:id/lock', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3851,7 +3877,7 @@ app.post('/api/admin/trade/block/orders/:id/lock', requireRoles(['super','admin'
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
-app.post('/api/admin/trade/block/orders/:id/unlock', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/trade/block/orders/:id/unlock', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3862,7 +3888,7 @@ app.post('/api/admin/trade/block/orders/:id/unlock', requireRoles(['super','admi
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
-app.delete('/api/admin/trade/block/orders/:id', requireRoles(['super','admin']), (req, res) => {
+app.delete('/api/admin/trade/block/orders/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3901,7 +3927,7 @@ app.get('/api/trade/rwa/price', (req, res) => {
     if (!pair && !token) return res.status(400).json({ error: 'pair_or_token_required' });
     const https = require('https');
     const getJson = (url, cb) => {
-      try { https.get(url, r => { let data = ''; r.on('data', c => { data += c }); r.on('end', () => { try { cb(null, JSON.parse(data||'{}')); } catch (e) { cb(e) } }); }).on('error', (e) => cb(e)); } catch (e) { cb(e) }
+      try { https.get(url, r => { let data = ''; r.on('data', c => { data += c }); r.on('end', () => { try { cb(null, JSON.parse(data || '{}')); } catch (e) { cb(e) } }); }).on('error', (e) => cb(e)); } catch (e) { cb(e) }
     };
     const tryPairs = (cb) => {
       const pairsUrl = `https://api.dexscreener.com/latest/dex/pairs/${encodeURIComponent(chain)}/${encodeURIComponent(pair)}`;
@@ -3934,22 +3960,22 @@ app.get('/api/trade/rwa/price', (req, res) => {
 });
 
 // ---- Admin: Trading time settings
-app.get('/api/admin/settings/trading', requireRoles(['super','admin']), (req, res) => {
+app.get('/api/admin/settings/trading', requireRoles(['super', 'admin']), (req, res) => {
   try {
-    const s = db.prepare('SELECT mx_enabled AS mxEnabled, us_enabled AS usEnabled, mx_holidays AS mxHolidays, us_holidays AS usHolidays FROM market_settings WHERE id = 1').get() || { mxEnabled:1, usEnabled:1, mxHolidays:'', usHolidays:'' };
+    const s = db.prepare('SELECT mx_enabled AS mxEnabled, us_enabled AS usEnabled, mx_holidays AS mxHolidays, us_holidays AS usHolidays FROM market_settings WHERE id = 1').get() || { mxEnabled: 1, usEnabled: 1, mxHolidays: '', usHolidays: '' };
     res.json(s);
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
-app.post('/api/admin/settings/trading', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/settings/trading', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { mxEnabled, usEnabled, mxHolidays, usHolidays } = req.body || {};
     db.prepare('INSERT INTO market_settings (id, mx_enabled, us_enabled, mx_holidays, us_holidays, updated_at) VALUES (1, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET mx_enabled=excluded.mx_enabled, us_enabled=excluded.us_enabled, mx_holidays=excluded.mx_holidays, us_holidays=excluded.us_holidays, updated_at=excluded.updated_at')
-      .run(mxEnabled ? 1 : 0, usEnabled ? 1 : 0, String(mxHolidays||''), String(usHolidays||''), new Date().toISOString());
+      .run(mxEnabled ? 1 : 0, usEnabled ? 1 : 0, String(mxHolidays || ''), String(usHolidays || ''), new Date().toISOString());
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 // 更新员工基本信息
-app.post('/api/admin/staffs/:id/update', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/staffs/:id/update', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -3965,13 +3991,13 @@ app.post('/api/admin/staffs/:id/update', requireRoles(['super','admin']), (req, 
       if (a) adminAssign = a.id;
     }
     db.prepare('UPDATE users SET name=?, account=?, assigned_admin_id=?, updated_at=? WHERE id=?')
-      .run(String(name||u.name||''), String(account||u.account||''), adminAssign, now, u.id);
+      .run(String(name || u.name || ''), String(account || u.account || ''), adminAssign, now, u.id);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
 // 修改员工登录密码
-app.post('/api/admin/staffs/:id/password', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/staffs/:id/password', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const { password } = req.body || {};
@@ -3980,7 +4006,7 @@ app.post('/api/admin/staffs/:id/password', requireRoles(['super','admin']), (req
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
-app.post('/api/admin/otp/setup', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/otp/setup', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const uid = Number(req.user.id);
     const raw = crypto.randomBytes(20);
@@ -3990,33 +4016,33 @@ app.post('/api/admin/otp/setup', requireRoles(['super','admin']), (req, res) => 
     const label = String(req.user.account || req.user.phone || uid);
     const url = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(label)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}`;
     res.json({ ok: true, secret, url });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.post('/api/admin/otp/enable', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/otp/enable', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const uid = Number(req.user.id);
     const { otp } = req.body || {};
     const row = db.prepare('SELECT otp_secret FROM users WHERE id=?').get(uid);
-    if (!row || !row.otp_secret) return res.status(400).json({ ok:false, error:'no_secret' });
-    if (!totpVerify(String(row.otp_secret), String(otp||''))) return res.status(401).json({ ok:false, error:'bad_otp' });
+    if (!row || !row.otp_secret) return res.status(400).json({ ok: false, error: 'no_secret' });
+    if (!totpVerify(String(row.otp_secret), String(otp || ''))) return res.status(401).json({ ok: false, error: 'bad_otp' });
     db.prepare('UPDATE users SET otp_enabled=1, updated_at=? WHERE id=?').run(new Date().toISOString(), uid);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.post('/api/admin/otp/disable', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/otp/disable', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const uid = Number(req.user.id);
     const { otp } = req.body || {};
     const row = db.prepare('SELECT otp_secret, otp_enabled FROM users WHERE id=?').get(uid);
-    if (!row || Number(row.otp_enabled||0)!==1) return res.json({ ok:true });
-    if (!totpVerify(String(row.otp_secret||''), String(otp||''))) return res.status(401).json({ ok:false, error:'bad_otp' });
+    if (!row || Number(row.otp_enabled || 0) !== 1) return res.json({ ok: true });
+    if (!totpVerify(String(row.otp_secret || ''), String(otp || ''))) return res.status(401).json({ ok: false, error: 'bad_otp' });
     db.prepare('UPDATE users SET otp_enabled=0, updated_at=? WHERE id=?').run(new Date().toISOString(), uid);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // 限制/解除员工登录
-app.post('/api/admin/staffs/:id/disable_login', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/staffs/:id/disable_login', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const disabled = Number(req.body?.disabled ? 1 : 0);
@@ -4027,7 +4053,7 @@ app.post('/api/admin/staffs/:id/disable_login', requireRoles(['super','admin']),
 });
 
 // 兼容：更新员工基本信息（路径顺序不同）
-app.post('/api/admin/staffs/update/:id', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/staffs/update/:id', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -4036,13 +4062,13 @@ app.post('/api/admin/staffs/update/:id', requireRoles(['super','admin']), (req, 
     if (!u) return res.status(404).json({ error: 'not found' });
     const now = new Date().toISOString();
     db.prepare('UPDATE users SET name=?, account=?, assigned_admin_id=?, updated_at=? WHERE id=?')
-      .run(String(name||''), String(account||''), (adminId==null? null : Number(adminId)), now, id);
+      .run(String(name || ''), String(account || ''), (adminId == null ? null : Number(adminId)), now, id);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
 // 兼容：查询参数方式
-app.post('/api/admin/staffs/update', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/staffs/update', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.query.id || req.body?.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
@@ -4051,7 +4077,7 @@ app.post('/api/admin/staffs/update', requireRoles(['super','admin']), (req, res)
     if (!u) return res.status(404).json({ error: 'not found' });
     const now = new Date().toISOString();
     db.prepare('UPDATE users SET name=?, account=?, assigned_admin_id=?, updated_at=? WHERE id=?')
-      .run(String(name||''), String(account||''), (adminId==null? null : Number(adminId)), now, id);
+      .run(String(name || ''), String(account || ''), (adminId == null ? null : Number(adminId)), now, id);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
@@ -4060,20 +4086,20 @@ app.get('/api/me/wallets', requireAuth, (req, res) => {
   try {
     const rows = db.prepare('SELECT id, network, address, created_at FROM user_wallets WHERE user_id = ? ORDER BY id DESC').all(Number(req.user.id));
     res.json({ wallets: rows });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.post('/api/me/wallets', requireAuth, (req, res) => {
   try {
     const { network, address } = req.body || {};
     const net = String(network || '').toUpperCase();
     const addr = String(address || '').trim();
-    if (!['ERC20','TRC20'].includes(net)) return res.status(400).json({ ok:false, error:'bad network' });
-    if (!addr) return res.status(400).json({ ok:false, error:'bad address' });
+    if (!['ERC20', 'TRC20'].includes(net)) return res.status(400).json({ ok: false, error: 'bad network' });
+    if (!addr) return res.status(400).json({ ok: false, error: 'bad address' });
     const now = new Date().toISOString();
     const info = db.prepare('INSERT INTO user_wallets (user_id, network, address, created_at) VALUES (?, ?, ?, ?)').run(Number(req.user.id), net, addr, now);
     const row = db.prepare('SELECT id, network, address, created_at FROM user_wallets WHERE id = ?').get(info.lastInsertRowid);
-    res.json({ ok:true, wallet: row });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true, wallet: row });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.put('/api/me/wallets/:id', requireAuth, (req, res) => {
   try {
@@ -4081,24 +4107,24 @@ app.put('/api/me/wallets/:id', requireAuth, (req, res) => {
     const { network, address } = req.body || {};
     const net = String(network || '').toUpperCase();
     const addr = String(address || '').trim();
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' });
-    if (!['ERC20','TRC20'].includes(net) || !addr) return res.status(400).json({ ok:false, error:'bad payload' });
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' });
+    if (!['ERC20', 'TRC20'].includes(net) || !addr) return res.status(400).json({ ok: false, error: 'bad payload' });
     db.prepare('UPDATE user_wallets SET network=?, address=? WHERE id=? AND user_id=?').run(net, addr, id, Number(req.user.id));
     const row = db.prepare('SELECT id, network, address, created_at FROM user_wallets WHERE id = ? AND user_id = ?').get(id, Number(req.user.id));
-    res.json({ ok:true, wallet: row });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true, wallet: row });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.delete('/api/me/wallets/:id', requireAuth, (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' });
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' });
     db.prepare('DELETE FROM user_wallets WHERE id=? AND user_id=?').run(id, Number(req.user.id));
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // 简化：基础更新入口（推荐前端使用）
-app.post('/api/admin/staffs/update_basic', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/staffs/update_basic', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { id, account, name, adminId, adminAccount } = req.body || {};
     let u = null;
@@ -4106,7 +4132,7 @@ app.post('/api/admin/staffs/update_basic', requireRoles(['super','admin']), (req
     if (Number.isFinite(idNum)) u = db.prepare('SELECT id, role, name, account FROM users WHERE id = ?').get(idNum);
     if (!u && account) u = db.prepare('SELECT id, role, name, account FROM users WHERE account = ?').get(String(account));
     if (!u && name) u = db.prepare('SELECT id, role, name, account FROM users WHERE name = ?').get(String(name));
-    if (!u) return res.status(404).json({ ok:false, error: 'not found' });
+    if (!u) return res.status(404).json({ ok: false, error: 'not found' });
     let adminAssign = null;
     if (adminId != null && Number.isFinite(Number(adminId))) adminAssign = Number(adminId);
     else if (adminAccount) {
@@ -4115,15 +4141,15 @@ app.post('/api/admin/staffs/update_basic', requireRoles(['super','admin']), (req
     }
     const now = new Date().toISOString();
     db.prepare('UPDATE users SET name=?, account=?, assigned_admin_id=?, updated_at=? WHERE id=?')
-      .run(String(name||u.name||''), String(account||u.account||''), adminAssign, now, u.id);
+      .run(String(name || u.name || ''), String(account || u.account || ''), adminAssign, now, u.id);
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 // ---- Institution profile (public)
 app.get('/api/institution/profile', (req, res) => {
   try {
     let row;
-    try { row = db.prepare('SELECT name, desc, avatar, updated_at FROM institution_profile WHERE id = 1').get(); } catch {}
+    try { row = db.prepare('SELECT name, desc, avatar, updated_at FROM institution_profile WHERE id = 1').get(); } catch { }
     const profile = {
       avatar: String(row?.avatar || '/logo.png'),
       name: String(row?.name || 'Institution'),
@@ -4131,64 +4157,64 @@ app.get('/api/institution/profile', (req, res) => {
       updated_at: row?.updated_at || null,
     };
     res.json(profile);
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // ---- Admin: Institution profile management ----
-app.get('/api/admin/institution/profile', requireRoles(['super','admin']), (req, res) => {
+app.get('/api/admin/institution/profile', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const row = db.prepare('SELECT name, desc, avatar, updated_at FROM institution_profile WHERE id = 1').get();
-    res.json({ ok:true, profile: row || { name:'', desc:'', avatar:'', updated_at:null } });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true, profile: row || { name: '', desc: '', avatar: '', updated_at: null } });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.post('/api/admin/institution/profile', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/institution/profile', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { name = '', desc = '', avatar = '' } = req.body || {};
     const now = new Date().toISOString();
     db.prepare('UPDATE institution_profile SET name=?, desc=?, avatar=?, updated_at=? WHERE id = 1')
-      .run(String(name||''), String(desc||''), String(avatar||''), now);
+      .run(String(name || ''), String(desc || ''), String(avatar || ''), now);
     const row = db.prepare('SELECT name, desc, avatar, updated_at FROM institution_profile WHERE id = 1').get();
-    res.json({ ok:true, profile: row });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true, profile: row });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.post('/api/admin/institution/upload_image', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/institution/upload_image', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { data, dataUrl, mime: mimeHint } = req.body || {};
     const raw = typeof data === 'string' && data ? data : (typeof dataUrl === 'string' ? dataUrl : '');
-    if (!raw || raw.length < 48) return res.status(400).json({ ok:false, error: 'invalid image data' });
+    if (!raw || raw.length < 48) return res.status(400).json({ ok: false, error: 'invalid image data' });
     const m = raw.match(/^data:(image\/\w+);base64,(.+)$/i);
     const mime = (m ? m[1] : String(mimeHint || '').toLowerCase()) || 'image/png';
     const b64 = m ? m[2] : raw.replace(/^data:[^,]*,/, '');
-    let buf; try { buf = Buffer.from(b64, 'base64'); } catch { return res.status(400).json({ ok:false, error:'bad base64' }); }
-    if (!buf || buf.length === 0) return res.status(400).json({ ok:false, error:'empty data' });
-    if (buf.length > 8 * 1024 * 1024) return res.status(413).json({ ok:false, error:'too large' });
+    let buf; try { buf = Buffer.from(b64, 'base64'); } catch { return res.status(400).json({ ok: false, error: 'bad base64' }); }
+    if (!buf || buf.length === 0) return res.status(400).json({ ok: false, error: 'empty data' });
+    if (buf.length > 8 * 1024 * 1024) return res.status(413).json({ ok: false, error: 'too large' });
     const ext = mime.includes('png') ? '.png' : (mime.includes('webp') ? '.webp' : '.jpg');
     const d = new Date();
-    const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
     const dir = path.join(UPLOADS_DIR, 'institution');
-    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { }
     const filename = `inst_${stamp}${ext}`;
     const filePath = path.join(dir, filename);
     fs.writeFileSync(filePath, buf);
     const url = `/uploads/institution/${filename}`;
-    res.json({ ok:true, url });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true, url });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // ---- Me: language preference
 app.post('/api/me/lang', requireAuth, (req, res) => {
   try {
     const v = String((req.body && req.body.lang) || '').trim().toLowerCase();
-    if (!['es','en','zh'].includes(v)) return res.status(400).json({ ok:false, error:'bad lang' });
+    if (!['es', 'en', 'zh'].includes(v)) return res.status(400).json({ ok: false, error: 'bad lang' });
     db.prepare('UPDATE users SET lang=?, updated_at=? WHERE id=?').run(v, new Date().toISOString(), Number(req.user.id));
-    res.json({ ok:true, lang: v });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true, lang: v });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 app.get('/api/me/invite/code', requireAuth, (req, res) => {
   try {
     const u = db.prepare('SELECT id, assigned_operator_id, referral_code FROM users WHERE id = ?').get(Number(req.user.id));
-    if (!u || u.assigned_operator_id == null) return res.status(403).json({ ok:false, error:'no_institution_access' });
+    if (!u || u.assigned_operator_id == null) return res.status(403).json({ ok: false, error: 'no_institution_access' });
     let code = String(u.referral_code || '').trim();
     if (!code) {
       let tries = 0;
@@ -4200,8 +4226,8 @@ app.get('/api/me/invite/code', requireAuth, (req, res) => {
       } while (tries < 5);
       db.prepare('UPDATE users SET referral_code=?, updated_at=? WHERE id=?').run(code, new Date().toISOString(), u.id);
     }
-    res.json({ ok:true, code });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true, code });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // ---- Staff: invitation code (self)
@@ -4212,7 +4238,7 @@ function generateInviteCode() {
 app.get('/api/admin/staffs/me/invite_code', requireRoles(['operator']), (req, res) => {
   try {
     const u = db.prepare('SELECT id, role, invite_code FROM users WHERE id = ?').get(Number(req.user.id));
-    if (!u) return res.status(404).json({ ok:false, error:'not found' });
+    if (!u) return res.status(404).json({ ok: false, error: 'not found' });
     let code = String(u.invite_code || '').trim();
     if (!code) {
       // ensure unique code
@@ -4225,8 +4251,8 @@ app.get('/api/admin/staffs/me/invite_code', requireRoles(['operator']), (req, re
       } while (tries < 5);
       db.prepare('UPDATE users SET invite_code=?, updated_at=? WHERE id=?').run(code, new Date().toISOString(), u.id);
     }
-    res.json({ ok:true, code });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true, code });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // ---- Me: verify invitation code to unlock institution access
@@ -4234,13 +4260,13 @@ app.post('/api/me/invite/verify', requireAuth, (req, res) => {
   try {
     const { code } = req.body || {};
     const c = String(code || '').trim().toUpperCase();
-    if (!c || c.length < 6) return res.status(400).json({ ok:false, error:'invalid code' });
+    if (!c || c.length < 6) return res.status(400).json({ ok: false, error: 'invalid code' });
     const me = db.prepare('SELECT id, assigned_operator_id, assigned_admin_id FROM users WHERE id = ?').get(Number(req.user.id));
-    if (!me) return res.status(404).json({ ok:false, error:'user not found' });
-    if (me.assigned_operator_id != null) return res.status(409).json({ ok:false, error:'already assigned' });
+    if (!me) return res.status(404).json({ ok: false, error: 'user not found' });
+    if (me.assigned_operator_id != null) return res.status(409).json({ ok: false, error: 'already assigned' });
     const refUser = db.prepare('SELECT id, assigned_operator_id, assigned_admin_id FROM users WHERE referral_code = ?').get(c);
     const staffInviter = db.prepare("SELECT id, role, assigned_admin_id FROM users WHERE invite_code = ? AND role = 'operator'").get(c);
-    if (!refUser && !staffInviter) return res.status(404).json({ ok:false, error:'invalid code' });
+    if (!refUser && !staffInviter) return res.status(404).json({ ok: false, error: 'invalid code' });
     const now = new Date().toISOString();
     let newOperatorId = null;
     let newAdminId = null;
@@ -4255,11 +4281,11 @@ app.post('/api/me/invite/verify', requireAuth, (req, res) => {
     }
     db.prepare('UPDATE users SET assigned_operator_id=?, assigned_admin_id=?, invited_by_user_id=?, updated_at=? WHERE id=?')
       .run(newOperatorId, newAdminId, invitedByUserId, now, Number(req.user.id));
-    res.json({ ok:true, assigned_operator_id: newOperatorId, assigned_admin_id: newAdminId, invited_by_user_id: invitedByUserId });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true, assigned_operator_id: newOperatorId, assigned_admin_id: newAdminId, invited_by_user_id: invitedByUserId });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-  try { if (!isBcryptHash(row.password_hash)) db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hashPassword(password), new Date().toISOString(), row.id); } catch {}
-app.get('/api/admin/audit/logs', requireRoles(['super','admin']), (req, res) => {
+try { if (!isBcryptHash(row.password_hash)) db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hashPassword(password), new Date().toISOString(), row.id); } catch { }
+app.get('/api/admin/audit/logs', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { adminId = '', method = '', path = '', from = '', to = '', page = '1', pageSize = '20' } = req.query || {};
     const where = [];
@@ -4279,7 +4305,7 @@ app.get('/api/admin/audit/logs', requireRoles(['super','admin']), (req, res) => 
   } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
-app.get('/api/admin/audit/export', requireRoles(['super','admin']), (req, res) => {
+app.get('/api/admin/audit/export', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { adminId = '', method = '', path = '', from = '', to = '' } = req.query || {};
     const where = [];
@@ -4291,14 +4317,14 @@ app.get('/api/admin/audit/export', requireRoles(['super','admin']), (req, res) =
     if (to) { where.push('created_at <= ?'); params.push(String(to)); }
     const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
     const rows = db.prepare(`SELECT id, admin_id AS adminId, method, path, ip, body, created_at FROM admin_audit ${whereSql} ORDER BY id DESC`).all(...params);
-    const header = ['id','adminId','method','path','ip','created_at','body'].join(',');
-    const lines = rows.map(r => [r.id, r.adminId, r.method, r.path, r.ip, r.created_at, String(r.body||'').replace(/\r?\n/g,' ')].map(x => '"' + String(x).replace(/"/g,'""') + '"').join(','));
+    const header = ['id', 'adminId', 'method', 'path', 'ip', 'created_at', 'body'].join(',');
+    const lines = rows.map(r => [r.id, r.adminId, r.method, r.path, r.ip, r.created_at, String(r.body || '').replace(/\r?\n/g, ' ')].map(x => '"' + String(x).replace(/"/g, '""') + '"').join(','));
     const csv = [header].concat(lines).join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.status(200).send(csv);
   } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.get('/api/admin/sessions', requireRoles(['super','admin']), (req, res) => {
+app.get('/api/admin/sessions', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { userId = '', page = '1', pageSize = '20' } = req.query || {};
     const where = [];
@@ -4314,7 +4340,7 @@ app.get('/api/admin/sessions', requireRoles(['super','admin']), (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
-app.post('/api/admin/sessions/revoke', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/sessions/revoke', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { tokenHash = '' } = req.body || {};
     if (!tokenHash) return res.status(400).json({ ok: false, error: 'bad tokenHash' });
@@ -4323,7 +4349,7 @@ app.post('/api/admin/sessions/revoke', requireRoles(['super','admin']), (req, re
   } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
-app.post('/api/admin/sessions/revoke_user', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/sessions/revoke_user', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { userId = '' } = req.body || {};
     const uid = Number(userId);
@@ -4340,19 +4366,19 @@ app.get('/api/yf/*', async (req, res) => {
     const url = upstream + rest;
     const u = new URL(url);
     if (!(u.pathname.startsWith('/v7/') || u.pathname.startsWith('/v8/'))) {
-      return res.status(400).json({ ok:false, error: 'bad path' });
+      return res.status(400).json({ ok: false, error: 'bad path' });
     }
     const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
     const ct = r.headers.get('content-type') || '';
     const isJson = ct.includes('application/json');
     const data = isJson ? await r.json() : await r.text();
     if (!r.ok) {
-      return res.status(r.status).json({ ok:false, error: `HTTP ${r.status}`, upstream: isJson ? data : String(data).slice(0, 400) });
+      return res.status(r.status).json({ ok: false, error: `HTTP ${r.status}`, upstream: isJson ? data : String(data).slice(0, 400) });
     }
     if (isJson) return res.json(data);
     return res.send(data);
   } catch (e) {
-    res.status(500).json({ ok:false, error: String(e?.message || e) });
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
@@ -4360,21 +4386,21 @@ app.get('/api/yf/*', async (req, res) => {
 app.get('/api/tv/quotes', async (req, res) => {
   try {
     const symsRaw = String(req.query.symbols || '').trim();
-    const syms = symsRaw ? symsRaw.split(/[,\s]+/).filter(Boolean).map(s=>String(s).toUpperCase()) : [];
-    if (!syms.length) return res.json({ ok:true, items: [] });
-    const tvSym = (s) => String(s).toUpperCase().replace(/\-([A-Z])$/,'.$1');
+    const syms = symsRaw ? symsRaw.split(/[,\s]+/).filter(Boolean).map(s => String(s).toUpperCase()) : [];
+    if (!syms.length) return res.json({ ok: true, items: [] });
+    const tvSym = (s) => String(s).toUpperCase().replace(/\-([A-Z])$/, '.$1');
     const tickers = [];
     const map = new Map();
     for (const s of syms) {
       const t = tvSym(s);
-      for (const ex of ['NASDAQ','NYSE','NYSEARCA','AMEX']) {
+      for (const ex of ['NASDAQ', 'NYSE', 'NYSEARCA', 'AMEX']) {
         const key = `${ex}:${t}`;
         tickers.push(key);
         map.set(key, s);
       }
     }
-    const body = { symbols: { tickers }, columns: ['close','change','change_percent','description'] };
-    const r = await fetch('https://scanner.tradingview.com/america/scan', { method:'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+    const body = { symbols: { tickers }, columns: ['close', 'change', 'change_percent', 'description'] };
+    const r = await fetch('https://scanner.tradingview.com/america/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const ct = r.headers.get('content-type') || '';
     const isJson = ct.includes('application/json');
     const j = isJson ? await r.json() : null;
@@ -4393,9 +4419,9 @@ app.get('/api/tv/quotes', async (req, res) => {
         seen.add(inputSym);
       }
     }
-    res.json({ ok:true, items: out });
+    res.json({ ok: true, items: out });
   } catch (e) {
-    res.status(500).json({ ok:false, error: String(e?.message||e) });
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 const FIELD_KEYS = String(process.env.DB_FIELD_ENC_KEYS || process.env.DB_FIELD_ENC_KEY || '').split(/[\s,]+/).filter(s => s && s.length === 64);
@@ -4424,7 +4450,7 @@ function decField(enc) {
         decipher.setAuthTag(tag);
         const pt = Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
         return pt;
-      } catch {}
+      } catch { }
     }
     return enc;
   } catch { return enc; }
@@ -4439,7 +4465,7 @@ function upsertCommissionBalance(userId, currency, delta) {
 }
 
 function getCommissionSettings() {
-  const s = db.prepare('SELECT block_pct AS blockPct, block_freeze_days AS blockFreezeDays, fund_pct AS fundPct, fund_freeze_days AS fundFreezeDays, ipo_pct AS ipoPct, ipo_freeze_days AS ipoFreezeDays FROM commission_settings WHERE id = 1').get() || { blockPct:5, blockFreezeDays:3, fundPct:5, fundFreezeDays:3, ipoPct:5, ipoFreezeDays:3 };
+  const s = db.prepare('SELECT block_pct AS blockPct, block_freeze_days AS blockFreezeDays, fund_pct AS fundPct, fund_freeze_days AS fundFreezeDays, ipo_pct AS ipoPct, ipo_freeze_days AS ipoFreezeDays FROM commission_settings WHERE id = 1').get() || { blockPct: 5, blockFreezeDays: 3, fundPct: 5, fundFreezeDays: 3, ipoPct: 5, ipoFreezeDays: 3 };
   return s;
 }
 
@@ -4463,7 +4489,7 @@ app.post('/api/me/institution/block/orders/:id/sell', requireAuth, async (req, r
     const rate = String(market) === 'mx' ? 1 : await getUsdMxnRateServer();
     const mxnRevenue = revenueUSD * rate;
     upsertBalance(Number(req.user.id), 'MXN', mxnRevenue, 'block_sell');
-    try { const symRow = db.prepare('SELECT symbol FROM block_trades WHERE id = ?').get(o.block_trade_id); const sym = String(symRow?.symbol || ''); db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(Number(req.user.id), '大宗交易已卖出', `你已卖出 ${sym}，总计 MX$${Number(mxnRevenue).toFixed(2)}`, new Date().toISOString()); } catch {}
+    try { const symRow = db.prepare('SELECT symbol FROM block_trades WHERE id = ?').get(o.block_trade_id); const sym = String(symRow?.symbol || ''); db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)').run(Number(req.user.id), '大宗交易已卖出', `你已卖出 ${sym}，总计 MX$${Number(mxnRevenue).toFixed(2)}`, new Date().toISOString()); } catch { }
     const profitUSD = revenueUSD - (buy * qty);
     const profitPct = buy > 0 ? ((p - buy) / buy) * 100 : 0;
     const soldAt = new Date().toISOString();
@@ -4490,21 +4516,21 @@ app.get('/api/me/invite/wallets', requireAuth, (req, res) => {
   try {
     const rows = db.prepare('SELECT currency, amount, updated_at FROM commission_wallets WHERE user_id = ? ORDER BY currency ASC').all(Number(req.user.id));
     res.json({ wallets: rows });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 app.get('/api/me/invite/commissions', requireAuth, (req, res) => {
   try {
     const items = db.prepare('SELECT id, invitee_id, source, order_id, currency, amount, status, frozen_until, created_at, released_at FROM commission_records WHERE inviter_id = ? ORDER BY id DESC').all(Number(req.user.id));
-    const mapPhone = (uid) => { try { const p = db.prepare('SELECT phone FROM users WHERE id = ?').get(uid)?.phone || ''; const s = String(p); if (s.length >= 7) return s.slice(0,3) + '****' + s.slice(-2); return s; } catch { return ''; } };
+    const mapPhone = (uid) => { try { const p = db.prepare('SELECT phone FROM users WHERE id = ?').get(uid)?.phone || ''; const s = String(p); if (s.length >= 7) return s.slice(0, 3) + '****' + s.slice(-2); return s; } catch { return ''; } };
     const now = Date.now();
     const out = items.map(r => {
       let remainMs = 0;
       if (r.status === 'frozen' && r.frozen_until) { const t = Date.parse(r.frozen_until); if (Number.isFinite(t)) remainMs = Math.max(0, t - now); }
-      return { id: r.id, inviteePhone: mapPhone(r.invitee_id), source: r.source, currency: r.currency, amount: Number(r.amount||0), status: r.status, frozen_until: r.frozen_until || null, remain_ms: remainMs, created_at: r.created_at, released_at: r.released_at || null };
+      return { id: r.id, inviteePhone: mapPhone(r.invitee_id), source: r.source, currency: r.currency, amount: Number(r.amount || 0), status: r.status, frozen_until: r.frozen_until || null, remain_ms: remainMs, created_at: r.created_at, released_at: r.released_at || null };
     });
     res.json({ items: out });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 app.post('/api/me/invite/withdraw', requireAuth, (req, res) => {
@@ -4512,39 +4538,39 @@ app.post('/api/me/invite/withdraw', requireAuth, (req, res) => {
     const { currency, amount } = req.body || {};
     const curr = String(currency || '').toUpperCase();
     const amt = Number(amount);
-    if (!['MXN','USD','USDT'].includes(curr)) return res.status(400).json({ ok:false, error:'bad currency' });
-    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok:false, error:'bad amount' });
+    if (!['MXN', 'USD', 'USDT'].includes(curr)) return res.status(400).json({ ok: false, error: 'bad currency' });
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'bad amount' });
     const row = db.prepare('SELECT amount FROM commission_wallets WHERE user_id = ? AND currency = ?').get(Number(req.user.id), curr);
     const bal = Number(row?.amount || 0);
-    if (bal < amt) return res.status(400).json({ ok:false, error:'insufficient' });
+    if (bal < amt) return res.status(400).json({ ok: false, error: 'insufficient' });
     const now = new Date().toISOString();
     db.prepare('UPDATE commission_wallets SET amount = ?, updated_at = ? WHERE user_id = ? AND currency = ?').run(bal - amt, now, Number(req.user.id), curr);
     upsertBalance(Number(req.user.id), curr, amt);
-    try { db.prepare('INSERT INTO notifications (user_id, message, created_at, read) VALUES (?, ?, ?, 0)').run(Number(req.user.id), `你已提现到账佣金 ${amt} ${curr}`, now); } catch {}
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    try { db.prepare('INSERT INTO notifications (user_id, message, created_at, read) VALUES (?, ?, ?, 0)').run(Number(req.user.id), `你已提现到账佣金 ${amt} ${curr}`, now); } catch { }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
-app.get('/api/admin/settings/invite', requireRoles(['super','admin']), (req, res) => {
-  try { const s = getCommissionSettings(); res.json(s); } catch (e) { res.status(500).json({ error:String(e?.message||e) }); }
+app.get('/api/admin/settings/invite', requireRoles(['super', 'admin']), (req, res) => {
+  try { const s = getCommissionSettings(); res.json(s); } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
-app.post('/api/admin/settings/invite', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/settings/invite', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const { blockPct, blockFreezeDays, fundPct, fundFreezeDays, ipoPct, ipoFreezeDays } = req.body || {};
     db.prepare('INSERT INTO commission_settings (id, block_pct, block_freeze_days, fund_pct, fund_freeze_days, ipo_pct, ipo_freeze_days, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET block_pct=excluded.block_pct, block_freeze_days=excluded.block_freeze_days, fund_pct=excluded.fund_pct, fund_freeze_days=excluded.fund_freeze_days, ipo_pct=excluded.ipo_pct, ipo_freeze_days=excluded.ipo_freeze_days, updated_at=excluded.updated_at')
-      .run(Number(blockPct||0), Number(blockFreezeDays||0), Number(fundPct||0), Number(fundFreezeDays||0), Number(ipoPct||0), Number(ipoFreezeDays||0), new Date().toISOString());
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ error:String(e?.message||e) }); }
+      .run(Number(blockPct || 0), Number(blockFreezeDays || 0), Number(fundPct || 0), Number(fundFreezeDays || 0), Number(ipoPct || 0), Number(ipoFreezeDays || 0), new Date().toISOString());
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
-app.post('/api/admin/invite/release_due', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/invite/release_due', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const now = new Date().toISOString();
     const due = db.prepare('SELECT id, inviter_id, currency, amount FROM commission_records WHERE status = ? AND frozen_until IS NOT NULL AND frozen_until <= ?').all('frozen', now);
     let count = 0;
-    for (const r of due) { upsertCommissionBalance(Number(r.inviter_id), String(r.currency||'MXN'), Number(r.amount||0)); db.prepare('UPDATE commission_records SET status=?, released_at=? WHERE id=?').run('released', now, r.id); count++; }
-    res.json({ ok:true, released: count });
-  } catch (e) { res.status(500).json({ error:String(e?.message||e) }); }
+    for (const r of due) { upsertCommissionBalance(Number(r.inviter_id), String(r.currency || 'MXN'), Number(r.amount || 0)); db.prepare('UPDATE commission_records SET status=?, released_at=? WHERE id=?').run('released', now, r.id); count++; }
+    res.json({ ok: true, released: count });
+  } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
 app.get('/api/me/invite/stats', requireAuth, (req, res) => {
@@ -4564,7 +4590,7 @@ app.get('/api/me/invite/stats', requireAuth, (req, res) => {
     const seriesRows = db.prepare("SELECT substr(created_at, 1, 10) AS day, currency, SUM(amount) AS total FROM commission_records WHERE inviter_id = ? AND status = 'released' AND created_at >= ? GROUP BY day, currency ORDER BY day ASC").all(uid, since);
     const series = seriesRows.map(r => ({ day: r.day, currency: String(r.currency || '').toUpperCase(), amount: Number(r.total || 0) }));
     res.json({ invitedCount, activeCount, totals, series });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // Catch-all 404 handler
@@ -4581,7 +4607,7 @@ app.get('/api/csrf', (req, res) => {
         if (COOKIE_DOMAIN) opts.domain = COOKIE_DOMAIN;
         const maxAgeMs = 30 * 24 * 3600 * 1000;
         res.cookie(CSRF_COOKIE_NAME, token, { ...opts, maxAge: maxAgeMs });
-      } catch {}
+      } catch { }
     }
     res.json({ ok: true, csrf: c, cookie: CSRF_COOKIE_NAME, header: CSRF_HEADER_NAME });
   } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
@@ -4599,7 +4625,7 @@ try {
         const r = String(role || 'admin').trim();
         const n = String(name || (r === 'operator' ? 'Operator ' + acc : 'Admin ' + acc));
         if (!acc || !pwd || pwd.length < 6) return res.status(400).json({ ok: false, error: 'bad payload' });
-        if (!['admin','operator','super'].includes(r)) return res.status(400).json({ ok: false, error: 'bad role' });
+        if (!['admin', 'operator', 'super'].includes(r)) return res.status(400).json({ ok: false, error: 'bad role' });
         const exists = db.prepare("SELECT id FROM users WHERE account = ? AND role IN ('admin','operator','super')").get(acc);
         if (exists) return res.json({ ok: true, id: exists.id, exists: true });
         const now = new Date().toISOString();
@@ -4609,13 +4635,13 @@ try {
       } catch (e) { return res.status(500).json({ ok: false, error: String(e?.message || e) }); }
     });
   }
-} catch {}
+} catch { }
 
 function getBalances(uid) {
   try {
     // 优先兼容行式存储：balances(user_id, currency, amount)
     let rows = [];
-    try { rows = db.prepare('SELECT currency, amount FROM balances WHERE user_id = ?').all(uid); } catch {}
+    try { rows = db.prepare('SELECT currency, amount FROM balances WHERE user_id = ?').all(uid); } catch { }
     if (Array.isArray(rows) && rows.length > 0 && rows[0] && (rows[0].currency !== undefined)) {
       const map = rows.reduce((m, r) => {
         const k = String(r.currency || '').toUpperCase();
@@ -4646,36 +4672,36 @@ app.post('/api/me/withdraw/create', requireAuth, (req, res) => {
     const { currency, amount, method_type, bank_account, usdt_address, usdt_network } = req.body || {};
     const c = String(currency || '').toUpperCase();
     const a = Number(amount);
-    if (!['USD','MXN','USDT'].includes(c) || !Number.isFinite(a) || a <= 0) return res.status(400).json({ ok:false, error:'bad_request' });
-    if (c === 'USDT') { if (!usdt_address || !usdt_network) return res.status(400).json({ ok:false, error:'bad_request' }); }
+    if (!['USD', 'MXN', 'USDT'].includes(c) || !Number.isFinite(a) || a <= 0) return res.status(400).json({ ok: false, error: 'bad_request' });
+    if (c === 'USDT') { if (!usdt_address || !usdt_network) return res.status(400).json({ ok: false, error: 'bad_request' }); }
     const bal = getBalances(uid);
-    try { console.log('[withdraw:create] uid=', uid, 'c=', c, 'a=', a, 'bal=', bal); } catch {}
+    try { console.log('[withdraw:create] uid=', uid, 'c=', c, 'a=', a, 'bal=', bal); } catch { }
     const cur = c === 'USD' ? bal.usd : (c === 'MXN' ? bal.mxn : bal.usdt);
-    if (cur < a) return res.status(400).json({ ok:false, error:'insufficient_balance' });
+    if (cur < a) return res.status(400).json({ ok: false, error: 'insufficient_balance' });
     const now = new Date().toISOString();
     db.prepare('INSERT INTO withdraw_orders (user_id, currency, amount, method_type, bank_account, usdt_address, usdt_network, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(uid, c, a, String(method_type||''), String(bank_account||''), String(usdt_address||''), String(usdt_network||''), 'pending', now, now);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+      .run(uid, c, a, String(method_type || ''), String(bank_account || ''), String(usdt_address || ''), String(usdt_network || ''), 'pending', now, now);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.get('/api/me/withdraw/list', requireAuth, (req, res) => {
   try {
     const uid = Number(req.user.id);
     const rows = db.prepare('SELECT id, currency, amount, status, created_at FROM withdraw_orders WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(uid);
-    res.json({ ok:true, items: rows });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true, items: rows });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.post('/api/me/withdraw/cancel/:id', requireAuth, (req, res) => {
   try {
     const uid = Number(req.user.id);
     const id = Number(req.params.id);
     const row = db.prepare('SELECT id, status FROM withdraw_orders WHERE id = ? AND user_id = ?').get(id, uid);
-    if (!row) return res.status(404).json({ ok:false, error:'not_found' });
-    if (String(row.status) !== 'pending') return res.status(400).json({ ok:false, error:'cannot_cancel' });
+    if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (String(row.status) !== 'pending') return res.status(400).json({ ok: false, error: 'cannot_cancel' });
     const now = new Date().toISOString();
     db.prepare('UPDATE withdraw_orders SET status = ?, canceled_at = ?, updated_at = ? WHERE id = ?').run('canceled', now, now, id);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.get('/api/admin/withdraw/list', requireRoles(adminReadRoles()), (req, res) => {
   try {
@@ -4686,48 +4712,48 @@ app.get('/api/admin/withdraw/list', requireRoles(adminReadRoles()), (req, res) =
     } else {
       rows = db.prepare('SELECT w.id, u.name, u.phone, w.created_at, u.assigned_operator_id AS operator_id, w.currency, w.amount, w.status FROM withdraw_orders w JOIN users u ON w.user_id = u.id ORDER BY w.id DESC LIMIT 200').all();
     }
-    res.json({ ok:true, items: rows });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true, items: rows });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.post('/api/admin/withdraw/:id/approve', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/withdraw/:id/approve', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const row = db.prepare('SELECT id, status FROM withdraw_orders WHERE id = ?').get(id);
-    if (!row) return res.status(404).json({ ok:false, error:'not_found' });
-    if (String(row.status) !== 'pending') return res.status(400).json({ ok:false, error:'bad_status' });
+    if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (String(row.status) !== 'pending') return res.status(400).json({ ok: false, error: 'bad_status' });
     const now = new Date().toISOString();
     db.prepare('UPDATE withdraw_orders SET status = ?, operator_id = ?, updated_at = ? WHERE id = ?').run('processing', Number(req.user.id), now, id);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.post('/api/admin/withdraw/:id/complete', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/withdraw/:id/complete', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const r = db.prepare('SELECT w.id, w.user_id, w.currency, w.amount, w.status FROM withdraw_orders w WHERE w.id = ?').get(id);
-    if (!r) return res.status(404).json({ ok:false, error:'not_found' });
-    if (String(r.status) !== 'processing') return res.status(400).json({ ok:false, error:'bad_status' });
+    if (!r) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (String(r.status) !== 'processing') return res.status(400).json({ ok: false, error: 'bad_status' });
     updateBalance(Number(r.user_id), String(r.currency), -Number(r.amount));
     const now = new Date().toISOString();
     db.prepare('UPDATE withdraw_orders SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?').run('completed', now, now, id);
     const u = db.prepare('SELECT id, lang FROM users WHERE id = ?').get(Number(r.user_id));
     const msg = String(u?.lang || 'zh').startsWith('zh') ? `你申请的${r.currency}已到账` : `Your ${r.currency} withdrawal has been completed`;
     db.prepare('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, ?, ?, ?)').run(Number(r.user_id), 'withdraw_completed', msg, now);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
-app.post('/api/admin/withdraw/:id/reject', requireRoles(['super','admin']), (req, res) => {
+app.post('/api/admin/withdraw/:id/reject', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const id = Number(req.params.id);
     const r = db.prepare('SELECT w.id, w.user_id, w.status FROM withdraw_orders w WHERE w.id = ?').get(id);
-    if (!r) return res.status(404).json({ ok:false, error:'not_found' });
-    if (!['pending','processing'].includes(String(r.status))) return res.status(400).json({ ok:false, error:'bad_status' });
+    if (!r) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (!['pending', 'processing'].includes(String(r.status))) return res.status(400).json({ ok: false, error: 'bad_status' });
     const now = new Date().toISOString();
     db.prepare('UPDATE withdraw_orders SET status = ?, rejected_at = ?, updated_at = ? WHERE id = ?').run('rejected', now, now, id);
     const u = db.prepare('SELECT id, lang FROM users WHERE id = ?').get(Number(r.user_id));
     const msg = String(u?.lang || 'zh').startsWith('zh') ? '你的提现已被驳回，若有疑问，可联系客服' : 'Your withdrawal has been rejected. Please contact support if you have questions.';
     db.prepare('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, ?, ?, ?)').run(Number(r.user_id), 'withdraw_rejected', msg, now);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // ---- Me: Bank cards ----
@@ -4736,55 +4762,55 @@ app.get('/api/me/bank-cards', requireAuth, (req, res) => {
     const uid = Number(req.user.id);
     const rows = db.prepare('SELECT id, bin, last4, holder_name, bank_name, created_at FROM user_bank_cards WHERE user_id = ? ORDER BY id DESC').all(uid);
     res.json({ ok: true, cards: rows });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.post('/api/me/bank-cards', requireAuth, (req, res) => {
   try {
     const uid = Number(req.user.id);
     const { cardNumber, holderName, bankName } = req.body || {};
-    const num = String(cardNumber || '').replace(/\s+/g,'');
-    if (!holderName || !bankName) return res.status(400).json({ ok:false, error:'invalid payload' });
-    const bin = num ? String(num).slice(0,6) : '';
+    const num = String(cardNumber || '').replace(/\s+/g, '');
+    if (!holderName || !bankName) return res.status(400).json({ ok: false, error: 'invalid payload' });
+    const bin = num ? String(num).slice(0, 6) : '';
     const last4 = num ? String(num).slice(-4) : '';
     const now = new Date().toISOString();
-    const info = db.prepare('INSERT INTO user_bank_cards (user_id, bin, last4, holder_name, bank_name, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(uid, bin, last4, String(holderName||''), String(bankName||''), now);
+    const info = db.prepare('INSERT INTO user_bank_cards (user_id, bin, last4, holder_name, bank_name, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(uid, bin, last4, String(holderName || ''), String(bankName || ''), now);
     const row = db.prepare('SELECT id, bin, last4, holder_name, bank_name, created_at FROM user_bank_cards WHERE id = ?').get(info.lastInsertRowid);
-    res.json({ ok:true, card: row });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true, card: row });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.put('/api/me/bank-cards/:id', requireAuth, (req, res) => {
   try {
     const uid = Number(req.user.id);
     const id = Number(req.params.id);
     const { cardNumber, holderName, bankName } = req.body || {};
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' });
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' });
     const row = db.prepare('SELECT id FROM user_bank_cards WHERE id = ? AND user_id = ?').get(id, uid);
-    if (!row) return res.status(404).json({ ok:false, error:'not found' });
-    const num = String(cardNumber || '').replace(/\s+/g,'');
-    const bin = num ? String(num).slice(0,6) : undefined;
+    if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+    const num = String(cardNumber || '').replace(/\s+/g, '');
+    const bin = num ? String(num).slice(0, 6) : undefined;
     const last4 = num ? String(num).slice(-4) : undefined;
     const sets = []; const params = [];
-    if (holderName != null) { sets.push('holder_name=?'); params.push(String(holderName||'')); }
-    if (bankName != null) { sets.push('bank_name=?'); params.push(String(bankName||'')); }
+    if (holderName != null) { sets.push('holder_name=?'); params.push(String(holderName || '')); }
+    if (bankName != null) { sets.push('bank_name=?'); params.push(String(bankName || '')); }
     if (bin !== undefined) { sets.push('bin=?'); params.push(bin); }
     if (last4 !== undefined) { sets.push('last4=?'); params.push(last4); }
     params.push(id, uid);
     if (sets.length) db.prepare(`UPDATE user_bank_cards SET ${sets.join(', ')} WHERE id=? AND user_id=?`).run(...params);
     const updated = db.prepare('SELECT id, bin, last4, holder_name, bank_name, created_at FROM user_bank_cards WHERE id = ? AND user_id = ?').get(id, uid);
-    res.json({ ok:true, card: updated });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true, card: updated });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 app.delete('/api/me/bank-cards/:id', requireAuth, (req, res) => {
   try {
     const uid = Number(req.user.id);
     const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ ok:false, error:'bad id' });
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' });
     db.prepare('DELETE FROM user_bank_cards WHERE id = ? AND user_id = ?').run(id, uid);
-    res.json({ ok:true });
-  } catch (e) { res.status(500).json({ ok:false, error: String(e?.message || e) }); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
-app.get('/api/admin/invite/commissions', requireRoles(['super','admin']), (req, res) => {
+app.get('/api/admin/invite/commissions', requireRoles(['super', 'admin']), (req, res) => {
   try {
     const status = String(req.query.status || '').trim();
     const currency = String(req.query.currency || '').trim().toUpperCase();
@@ -4809,7 +4835,7 @@ app.get('/api/admin/invite/commissions', requireRoles(['super','admin']), (req, 
     const items = rows.map(r => {
       let remainMs = 0;
       if (r.status === 'frozen' && r.frozen_until) { const t = Date.parse(r.frozen_until); if (Number.isFinite(t)) remainMs = Math.max(0, t - now); }
-      const maskPhone = (s) => { const x = String(s || ''); return x.length >= 7 ? (x.slice(0,3) + '****' + x.slice(-2)) : x; };
+      const maskPhone = (s) => { const x = String(s || ''); return x.length >= 7 ? (x.slice(0, 3) + '****' + x.slice(-2)) : x; };
       return {
         id: r.id,
         inviterId: r.inviterId,
@@ -4830,7 +4856,7 @@ app.get('/api/admin/invite/commissions', requireRoles(['super','admin']), (req, 
       };
     });
     res.json({ items, total, page, pageSize });
-  } catch (e) { res.status(500).json({ error:String(e?.message||e) }); }
+  } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
 // Final 404 handler (must be registered last)
@@ -4857,29 +4883,142 @@ app.get('/api/me/credit/score', requireAuth, (req, res) => {
     const s = Number(row?.credit_score ?? 100);
     const score = Number.isFinite(s) ? s : 100;
     res.json({ ok: true, score });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
+});
+
+app.get('/api/me/credit/apps', requireAuth, (req, res) => {
+  try {
+    const uid = Number(req.user.id);
+    const rows = db.prepare('SELECT * FROM credit_apps WHERE user_id = ? ORDER BY id DESC').all(uid);
+    const items = rows.map(r => ({
+      ...r,
+      images: (() => { try { return JSON.parse(r.images || '[]'); } catch { return []; } })()
+    }));
+    res.json({ ok: true, items });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
+});
+
+app.post('/api/me/credit/apply', requireAuth, (req, res) => {
+  try {
+    const uid = Number(req.user.id);
+    const { name, phone, address, city, state, zip, periodUnit, images } = req.body;
+    const amount = Number(req.body.amount || 0);
+    const periodValue = Number(req.body.periodValue || 0);
+    const score = Number(req.body.score || 0);
+
+    if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: 'bad amount' });
+
+    // Check if there is already a pending application
+    const pending = db.prepare("SELECT id FROM credit_apps WHERE user_id = ? AND status = 'pending'").get(uid);
+    if (pending) return res.status(400).json({ ok: false, error: 'already_pending' });
+
+    const imgsStr = JSON.stringify(Array.isArray(images) ? images : []);
+
+    db.prepare(`INSERT INTO credit_apps (
+      user_id, name, phone, address, city, state, zip, amount, score, period_value, period_unit, images, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`)
+      .run(uid, String(name || ''), String(phone || ''), String(address || ''), String(city || ''), String(state || ''), String(zip || ''), amount, score, periodValue, String(periodUnit || 'month'), imgsStr, new Date().toISOString(), new Date().toISOString());
+
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // ---- Admin: set user credit score ----
-app.post('/api/admin/users/:uid/credit_score', requireRoles(['super','admin','operator']), (req, res) => {
+app.post('/api/admin/users/:uid/credit_score', requireRoles(['super', 'admin', 'operator']), (req, res) => {
   try {
     const uid = Number(req.params.uid);
     const raw = Number(req.body?.score);
-    if (!Number.isFinite(uid)) return res.status(400).json({ ok:false, error:'bad uid' });
-    if (!Number.isFinite(raw)) return res.status(400).json({ ok:false, error:'bad score' });
+    if (!Number.isFinite(uid)) return res.status(400).json({ ok: false, error: 'bad uid' });
+    if (!Number.isFinite(raw)) return res.status(400).json({ ok: false, error: 'bad score' });
     const score = Math.max(0, Math.min(1000, Math.round(raw)));
     if (String(req.user.role) === 'operator' && !operatorCanManageCustomer(req, uid)) {
-      return res.status(403).json({ ok:false, error:'Forbidden' });
+      return res.status(403).json({ ok: false, error: 'Forbidden' });
     }
     const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(uid);
-    if (!exists) return res.status(404).json({ ok:false, error:'user not found' });
+    if (!exists) return res.status(404).json({ ok: false, error: 'user not found' });
     db.prepare('UPDATE users SET credit_score=?, updated_at=? WHERE id=?').run(score, new Date().toISOString(), uid);
-    try { db.exec('CREATE TABLE IF NOT EXISTS credit_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, admin_id INTEGER, role TEXT, score INTEGER, created_at TEXT)'); } catch {}
-    try { db.prepare('INSERT INTO credit_audit (user_id, admin_id, role, score, created_at) VALUES (?, ?, ?, ?, ?)').run(uid, Number(req.user.id), String(req.user.role||''), score, new Date().toISOString()); } catch {}
-    try { db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
-      .run(uid, '信用分更新', `你当前的机构信用分已更新为：${score}`, new Date().toISOString()); } catch {}
-    res.json({ ok:true, score });
-  } catch (e) { res.status(500).json({ ok:false, error:String(e?.message||e) }); }
+    try { db.exec('CREATE TABLE IF NOT EXISTS credit_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, admin_id INTEGER, role TEXT, score INTEGER, created_at TEXT)'); } catch { }
+    try { db.prepare('INSERT INTO credit_audit (user_id, admin_id, role, score, created_at) VALUES (?, ?, ?, ?, ?)').run(uid, Number(req.user.id), String(req.user.role || ''), score, new Date().toISOString()); } catch { }
+    try {
+      db.prepare('INSERT INTO notifications (user_id, title, message, created_at, read, pinned) VALUES (?, ?, ?, ?, 0, 0)')
+        .run(uid, '信用分更新', `你当前的机构信用分已更新为：${score}`, new Date().toISOString());
+    } catch { }
+    res.json({ ok: true, score });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
+});
+
+// ---- Admin: Credit Audit ----
+app.get('/api/admin/credit/apps', requireRoles(['super', 'admin', 'operator']), (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const status = String(req.query.status || '').trim();
+    const mine = String(req.query.mine || '') === '1';
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize || 50)));
+    const offset = (page - 1) * pageSize;
+
+    const where = [];
+    const params = [];
+
+    if (q) {
+      where.push('(name LIKE ? OR phone LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`);
+    }
+    if (status && status !== 'all') {
+      where.push('status = ?');
+      params.push(status);
+    }
+    if (mine && String(req.user.role) === 'operator') {
+      // Filter by users assigned to this operator
+      // We need to join users table or subquery. Since credit_apps has user_id, we can join.
+      // But wait, credit_apps might not be fully linked if created from outside?
+      // Assuming credit_apps.user_id is valid.
+      // Let's do a subquery for simplicity or join.
+      where.push(`user_id IN (SELECT id FROM users WHERE assigned_operator_id = ?)`);
+      params.push(req.user.id);
+    }
+
+    const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
+    const sql = `SELECT * FROM credit_apps ${whereSql} ORDER BY id DESC LIMIT ? OFFSET ?`;
+    const items = db.prepare(sql).all(...params, pageSize, offset);
+    const total = db.prepare(`SELECT COUNT(1) AS c FROM credit_apps ${whereSql}`).get(...params)?.c || 0;
+
+    // Parse images JSON
+    for (const it of items) {
+      try { it.images = JSON.parse(it.images || '[]'); } catch { it.images = []; }
+    }
+
+    res.json({ ok: true, items, total, page, pageSize });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
+});
+
+app.post('/api/admin/credit/:id/approve', requireRoles(['super', 'admin']), (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const amount = Number(req.body.amount || 0);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' });
+
+    const row = db.prepare('SELECT * FROM credit_apps WHERE id = ?').get(id);
+    if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+    if (row.status === 'done') return res.json({ ok: true }); // idempotent
+
+    db.prepare("UPDATE credit_apps SET status='done', amount=?, updated_at=? WHERE id=?").run(amount, new Date().toISOString(), id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
+});
+
+app.post('/api/admin/credit/:id/reject', requireRoles(['super', 'admin']), (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'bad id' });
+
+    const row = db.prepare('SELECT * FROM credit_apps WHERE id = ?').get(id);
+    if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+    if (row.status === 'rejected') return res.json({ ok: true });
+
+    db.prepare("UPDATE credit_apps SET status='rejected', updated_at=? WHERE id=?").run(new Date().toISOString(), id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 });
 
 // Final 404 handler (must be registered last)

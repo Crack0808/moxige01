@@ -20,8 +20,9 @@ services:
       - DB_ENC_KEY=${DB_ENC_KEY}
       - REDIS_URL=redis://mxg-redis:6379
       - UPLOAD_SCAN_URL=${UPLOAD_SCAN_URL}
+      - VITE_TWELVEDATA_KEY=4adb66b600ef448ab803a3ae0590fcdc
     ports:
-      - "5210:5210"   # primary API port for local dev
+      - "5210:5210" # primary API port for local dev
     volumes:
       - ./server/data:/app/data
     networks:
@@ -33,7 +34,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "node", "-e", "http=require('http'); http.get('http://localhost:5210/api/health',(r)=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1));"]
+      test: [ "CMD", "node", "-e", "http=require('http'); http.get('http://localhost:5210/api/health',(r)=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1));" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -44,7 +45,7 @@ services:
   database:
     image: alpine:3.20
     container_name: mxg-database-helper
-    command: ["/bin/sh","-c","sleep infinity"]
+    command: [ "/bin/sh", "-c", "sleep infinity" ]
     volumes:
       - ./server/data:/app/data
     networks:
@@ -62,6 +63,7 @@ services:
       - IM_DB_ENC_KEY=${IM_DB_ENC_KEY}
       - REDIS_URL=redis://mxg-redis:6379
       - UPLOAD_SCAN_URL=${UPLOAD_SCAN_URL}
+      - DEEPL_AUTH_KEY=e82bc50c-c51f-449e-910e-d75698b517e8:fx
     ports:
       - "3000:3000"
     volumes:

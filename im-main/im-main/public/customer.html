@@ -1,12 +1,809 @@
 <!doctype html>
 <html>
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ECIM</title>
-  <link rel="icon" href="/tiny.png" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="/im-api/tiny.png" />
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden
+    }
+
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system;
+      margin: 0;
+      background: #f5f6f8
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      height: 100vh;
+      display: flex;
+    }
+
+    .sidebar {
+      width: 280px;
+      background: #f0f3f9;
+      border-right: 1px solid #e5e8ef;
+      display: flex;
+      flex-direction: column
+    }
+
+    .sidebar-top {
+      padding: 12px;
+      display: flex;
+      gap: 8px
+    }
+
+    .sidebar-search {
+      flex: 1
+    }
+
+    .sidebar-btn {
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 6px;
+      background: #2860ff;
+      color: #fff
+    }
+
+    .conversation-list {
+      flex: 1;
+      overflow-y: auto
+    }
+
+    .conversation-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e8ecf3;
+      cursor: pointer;
+      background: transparent
+    }
+
+    .conversation-item:hover {
+      background: #e9eefc
+    }
+
+    .read-pill {
+      background: #1ea7ff;
+      color: #fff;
+      border-radius: 10px;
+      padding: 0 6px;
+      height: 20px;
+      line-height: 20px;
+      font-size: 12px
+    }
+
+    .read-pill.unread {
+      background: #f59e0b
+    }
+
+    .ci-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 0
+    }
+
+    .ci-name {
+      font-weight: 600;
+      color: #1a1f36;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .ci-meta {
+      font-size: 12px;
+      color: #6b7280;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%
+    }
+
+    .dot.online {
+      background: #2ecc71
+    }
+
+    .dot.offline {
+      background: #c4c9d5
+    }
+
+    .unread-badge {
+      background: #2860ff;
+      color: #fff;
+      border-radius: 10px;
+      padding: 0 6px;
+      height: 20px;
+      line-height: 20px;
+      font-size: 12px;
+      align-self: center;
+      display: none
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column
+    }
+
+    .rightbar {
+      width: 280px;
+      background: #f0f3f9;
+      border-left: 1px solid #e5e8ef;
+      display: flex;
+      flex-direction: column
+    }
+
+    .rightbar-title {
+      padding: 12px;
+      font-weight: 600;
+      color: #fff
+    }
+
+    .note-editor {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-bottom: 1px solid #e5e8ef
+    }
+
+    .note-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px
+    }
+
+    .note-list #noteCards {
+      display: flex;
+      flex-direction: column;
+      gap: 5px
+    }
+
+    .note-card {
+      position: relative
+    }
+
+    .card-menu-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: #3b82f6;
+      color: #fff
+    }
+
+    .card-menu {
+      position: absolute;
+      top: 40px;
+      right: 8px;
+      background: #0f1c2d;
+      color: #e6edf7;
+      border: 1px solid #1b2c48;
+      border-radius: 8px;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, .45);
+      min-width: 160px;
+      z-index: 10000;
+      user-select: none
+    }
+
+    .card-menu .popup-item {
+      color: #e6edf7;
+      background: #0f1c2d;
+      border-radius: 8px;
+      -webkit-tap-highlight-color: transparent;
+      outline: none
+    }
+
+    .card-menu .popup-item {
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 500
+    }
+
+    .card-menu .popup-item:hover {
+      background: #173152
+    }
+
+    .note-card {
+      background: #fff;
+      border: 1px solid #e5e8ef;
+      border-radius: 12px;
+      padding: 10px
+    }
+
+    .note-card-head {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 6px
+    }
+
+    .note-card-body {
+      color: #1a1f36;
+      line-height: 1.5
+    }
+
+    .header {
+      padding: 12px;
+      background: #fff;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      justify-content: space-between
+    }
+
+    .user {
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #eee
+    }
+
+    .name {
+      font-weight: 600
+    }
+
+    .phone {
+      color: #666;
+      font-size: 12px
+    }
+
+    .meta {
+      display: flex;
+      gap: 8px
+    }
+
+    .badge {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px
+    }
+
+    .badge.online {
+      background: #d7f7e8;
+      color: #137a3d
+    }
+
+    .badge.offline {
+      background: #eef1f6;
+      color: #6b7280
+    }
+
+    .badge.read {
+      background: #d7f7e8;
+      color: #137a3d
+    }
+
+    .badge.unread {
+      background: #fff2cc;
+      color: #7a5e00
+    }
+
+    .note {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      background: #fff;
+      border-bottom: 1px solid #eee
+    }
+
+    .setup {
+      padding: 12px;
+      display: flex;
+      gap: 8px;
+      background: #fff
+    }
+
+    .chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-anchor: none
+    }
+
+    .container.customer .messages {
+      background: transparent;
+    }
+
+    .composer {
+      padding: 12px;
+      background: #fff;
+      border-top: 1px solid #eee;
+      display: flex;
+      gap: 8px
+    }
+
+    input,
+    textarea {
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      flex: 1;
+      resize: none
+    }
+
+    textarea {
+      overflow-y: hidden
+    }
+
+    button {
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 6px;
+      background: #2860ff;
+      color: #fff
+    }
+
+    .msg {
+      max-width: 66%;
+      padding: 8px 10px;
+      border-radius: 12px
+    }
+
+    .msg.me {
+      margin-left: auto;
+      background: #2860ff;
+      color: #fff
+    }
+
+    .msg.other {
+      margin-right: auto;
+      background: #e9eefc;
+      color: #1a1f36
+    }
+
+    .msg.flash {
+      box-shadow: 0 0 0 2px #3b82f6 inset
+    }
+
+    .reply {
+      background: rgba(0, 0, 0, .12);
+      color: #1a1f36;
+      border-left: 3px solid #3b82f6;
+      border-radius: 8px;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .reply {
+      cursor: pointer
+    }
+
+    .hidden {
+      display: none !important
+    }
+
+    /* 客户端暗色主题 */
+    .theme-dark {
+      background: #0e1726
+    }
+
+    .theme-dark {
+      color: #e6edf7
+    }
+
+    .theme-dark .header {
+      background: #0f1c2d;
+      border-bottom-color: #16263d
+    }
+
+    .theme-dark .composer {
+      background: #0f1c2d;
+      border-top-color: #16263d
+    }
+
+    .theme-dark .messages {
+      background: #0e1726
+    }
+
+    .theme-dark input {
+      background: #101d30;
+      border-color: #1b2c48;
+      color: #e6edf7
+    }
+
+    .theme-dark input::placeholder {
+      color: #b9c6dc
+    }
+
+    .theme-dark button {
+      background: #3b82f6;
+      color: #fff
+    }
+
+    .theme-dark button:hover {
+      background: #2563eb
+    }
+
+    .theme-dark .icon-btn {
+      background: #3b82f6
+    }
+
+    .theme-dark .icon-btn:hover {
+      background: #2563eb
+    }
+
+    .theme-dark .msg.me {
+      background: #1ea7ff
+    }
+
+    .theme-dark .msg.other {
+      background: #24364f;
+      color: #e6edf7
+    }
+
+    .theme-dark .msg.flash {
+      box-shadow: 0 0 0 2px #3b82f6 inset
+    }
+
+    .theme-dark .reply {
+      background: #16263d;
+      color: #93a4bf;
+      border-left-color: #3b82f6
+    }
+
+    .theme-dark .reply {
+      cursor: pointer
+    }
+
+    .reply-thumb {
+      width: 48px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 6px
+    }
+
+    .theme-dark .reply-thumb {
+      border: 1px solid #1b2c48
+    }
+
+    .theme-dark .name {
+      color: #e6edf7
+    }
+
+    .theme-dark .phone {
+      color: #93a4bf
+    }
+
+    .header-mobile {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 5;
+      background: #0f1c2d;
+      border-bottom: 1px solid #16263d;
+      padding: 12px
+    }
+
+    .service-label {
+      width: 28px;
+      height: 28px;
+      border-radius: 14px;
+      background: #3b82f6;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 600
+    }
+
+    .back-btn {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: transparent;
+      color: #8dd7ff;
+      cursor: pointer;
+      z-index: 6
+    }
+
+    .back-btn:hover {
+      color: #c8e7ff
+    }
+
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: #2860ff;
+      color: #fff
+    }
+
+    .popup-menu {
+      position: absolute;
+      bottom: 60px;
+      left: 12px;
+      background: #fff;
+      border: 1px solid #e5e8ef;
+      border-radius: 10px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .08);
+      padding: 8px;
+      z-index: 10000
+    }
+
+    .popup-menu.card-menu {
+      background: #0f1c2d;
+      border-color: #1b2c48;
+      color: #e6edf7
+    }
+
+    .popup-item {
+      padding: 8px 10px;
+      cursor: pointer;
+      display: block;
+      color: #1a1f36
+    }
+
+    .emoji-item {
+      display: inline-block;
+      font-size: 20px;
+      padding: 6px;
+      cursor: pointer
+    }
+
+    .msg-image {
+      max-width: 60%;
+      border-radius: 12px
+    }
+
+    .composer {
+      position: relative
+    }
+
+    .container.customer .composer {
+      position: sticky;
+      bottom: 0;
+      z-index: 6
+    }
+
+    .reply-preview {
+      position: absolute;
+      left: 12px;
+      right: 120px;
+      bottom: 68px;
+      background: #0f1c2d;
+      border: 1px solid #1b2c48;
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px
+    }
+
+    .reply-preview-text {
+      color: #e6edf7;
+      font-size: 12px;
+      opacity: .9;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .reply-preview-cancel {
+      background: #3b82f6;
+      color: #fff;
+      border: 0;
+      border-radius: 6px;
+      padding: 6px 10px
+    }
+
+    .container.customer {
+      max-width: none;
+      width: 100%;
+      margin: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding-top: 56px;
+      padding-bottom: 0;
+      box-sizing: border-box;
+      overflow: hidden
+    }
+
+    #sendBtn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: 18px;
+      background: #2da1e9;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    #sendBtn:hover {
+      filter: brightness(1.05)
+    }
+
+    #sendBtn svg {
+      width: 20px;
+      height: 20px
+    }
+
+    /* 图片放大查看 */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50
+    }
+
+    .lightbox img {
+      max-width: 90%;
+      max-height: 90%;
+      border-radius: 12px
+    }
+
+    /* 暗色主题扩展到边栏与列表 */
+    .theme-dark .sidebar {
+      background: #111827;
+      border-right-color: #334155
+    }
+
+    .theme-dark .rightbar {
+      background: #111827;
+      border-left-color: #334155
+    }
+
+    .theme-dark .conversation-item {
+      border-bottom-color: #334155
+    }
+
+    .theme-dark .conversation-item:hover {
+      background: #16263d
+    }
+
+    .theme-dark .ci-name {
+      color: #e6edf7
+    }
+
+    .theme-dark .ci-meta {
+      color: #93a4bf
+    }
+
+    .theme-dark .unread-badge {
+      background: #1ea7ff;
+      color: #fff
+    }
+
+    /* 菜单背景遮罩 */
+    .menu-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 28, 45, .6);
+      z-index: 9998
+    }
+
+    .preview-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 28, 45, .6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10001
+    }
+
+    .preview-box {
+      background: #0f1c2d;
+      border: 1px solid #1b2c48;
+      border-radius: 12px;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, .45);
+      padding: 12px;
+      max-width: 90vw
+    }
+
+    .preview-image {
+      max-width: 80vw;
+      max-height: 60vh;
+      border-radius: 8px;
+      display: block
+    }
+
+    .preview-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px
+    }
+
+    .preview-actions button {
+      background: #0f1c2d;
+      color: #e6edf7;
+      border: 1px solid #1b2c48;
+      border-radius: 8px;
+      padding: 8px 12px
+    }
+
+    .preview-actions button:hover {
+      background: #173152
+    }
+
+    .msg-menu {
+      position: fixed;
+      background: #0f1c2d;
+      color: #e6edf7;
+      border: 1px solid #1b2c48;
+      border-radius: 8px;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, .45);
+      min-width: 140px;
+      z-index: 10002;
+      padding: 6px 0
+    }
+
+    .msg-menu-item {
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer
+    }
+
+    .msg-menu-item:hover {
+      background: #173152
+    }
+
+    .msg-menu-item.danger {
+      color: #fca5a5
+    }
+  </style>
 </head>
+
 <body class="theme-dark">
   <div class="container customer">
     <div class="header header-mobile">
@@ -21,10 +818,10 @@
         <button id="emojiBtn" class="icon-btn">🙂</button>
         <button id="sendBtn"></button>
         <div id="plusMenu" class="popup-menu hidden">
-        <label class="popup-item">
-          <input id="photoInput" type="file" accept="image/*" class="hidden" />
-          <span id="uploadText">上传照片</span>
-        </label>
+          <label class="popup-item">
+            <input id="photoInput" type="file" accept="image/*" class="hidden" />
+            <span id="uploadText">上传照片</span>
+          </label>
         </div>
         <div id="emojiMenu" class="popup-menu hidden">
           <div class="emoji-item">😀</div>
@@ -36,21 +833,21 @@
       </div>
     </div>
   </div>
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="/im-api/socket.io/socket.io.js"></script>
   <script>
-    try { const setupEl = document.getElementById('setup'); if (setupEl) setupEl.remove(); } catch {}
+    try { const setupEl = document.getElementById('setup'); if (setupEl) setupEl.remove(); } catch { }
     const qs = new URLSearchParams(location.search)
     const qsToken = qs.get('token') || ''
     const lsToken = (typeof localStorage !== 'undefined' ? (localStorage.getItem('im:token') || '') : '')
     const token = qsToken || lsToken
-    let apiBase = qs.get('api') || ''
+    let apiBase = qs.get('api') || '/im-api'
     let wsBase = qs.get('ws') || ''
     const wsPath = qs.get('wspath') || ''
-    const makeSocket = () => (wsBase ? io(wsBase, { auth: { token }, query: { token }, path: (wsPath || '/socket.io/') }) : io({ auth: { token }, query: { token }, path: (wsPath || '/socket.io/') }))
+    const makeSocket = () => (wsBase ? io(wsBase, { auth: { token }, query: { token }, path: (wsPath || '/im-api/socket.io/') }) : io({ auth: { token }, query: { token }, path: (wsPath || '/im-api/socket.io/') }))
     const CSRF_COOKIE = 'csrf_token'
     const CSRF_HEADER = 'x-csrf-token'
-    function getCookie(name){ try { const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g,'\\$1') + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : '' } catch { return '' } }
-    async function ensureCsrf(){ try { let t = getCookie(CSRF_COOKIE); if (!t){ const r = await fetch('/api/csrf',{ method:'GET', credentials:'include' }); const j = await r.json(); t = j && j.csrf || '' } return t || '' } catch { return '' } }
+    function getCookie(name) { try { const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : '' } catch { return '' } }
+    async function ensureCsrf() { try { let t = getCookie(CSRF_COOKIE); if (!t) { const r = await fetch('/api/csrf', { method: 'GET', credentials: 'include' }); const j = await r.json(); t = j && j.csrf || '' } return t || '' } catch { return '' } }
     let socket = makeSocket()
     const originalFetch = window.fetch.bind(window)
     window.fetch = (input, init = {}) => {
@@ -59,8 +856,8 @@
         if (url && url.startsWith('/api')) {
           const headers = { ...(init.headers || {}), ...(token ? { 'x-im-token': token } : {}) }
           const method = String((init && init.method) || 'GET').toUpperCase()
-          if (['POST','PUT','PATCH','DELETE'].includes(method)) {
-            try { const t = getCookie(CSRF_COOKIE); if (t) headers[CSRF_HEADER] = t } catch {}
+          if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+            try { const t = getCookie(CSRF_COOKIE); if (t) headers[CSRF_HEADER] = t } catch { }
           }
           if (token) {
             const hasQuery = url.includes('?')
@@ -71,17 +868,17 @@
           const req = (typeof input === 'string') ? url : new Request(url, input)
           return originalFetch(req, { ...init, headers, credentials: 'include' })
         }
-      } catch {}
+      } catch { }
       return originalFetch(input, init)
     }
     socket.on('connect_error', () => {
       try {
         apiBase = apiBase || 'http://127.0.0.1:3000'
         wsBase = wsBase || 'http://127.0.0.1:3000'
-        try { socket.disconnect() } catch {}
+        try { socket.disconnect() } catch { }
         socket = makeSocket()
         socket.on('connect', () => { if (currentPhone) socket.emit('join', { phone: currentPhone, role: 'customer' }) })
-      } catch {}
+      } catch { }
     })
     socket.on('connect', () => { if (currentPhone) socket.emit('join', { phone: currentPhone, role: 'customer' }) })
     const urlParams = new URLSearchParams(location.search)
@@ -107,35 +904,36 @@
     const photoInput = document.getElementById('photoInput')
     const composerEl = document.querySelector('.composer')
     const previewOverlay = document.getElementById('previewOverlay') || (() => {
-      const o = document.createElement('div'); o.id='previewOverlay'; o.className='preview-overlay hidden';
+      const o = document.createElement('div'); o.id = 'previewOverlay'; o.className = 'preview-overlay hidden';
       // overlay style
-      o.style.position='fixed'; o.style.inset='0'; o.style.background='rgba(0,0,0,0.35)'; o.style.display='flex'; o.style.alignItems='center'; o.style.justifyContent='center'; o.style.zIndex='10050';
-      const b=document.createElement('div'); b.className='preview-box';
+      o.style.position = 'fixed'; o.style.inset = '0'; o.style.background = 'rgba(0,0,0,0.35)'; o.style.display = 'flex'; o.style.alignItems = 'center'; o.style.justifyContent = 'center'; o.style.zIndex = '10050';
+      const b = document.createElement('div'); b.className = 'preview-box';
       // box style (smaller)
-      b.style.width='360px'; b.style.maxWidth='92vw'; b.style.maxHeight='80vh'; b.style.background='#111d33'; b.style.borderRadius='12px'; b.style.boxShadow='0 8px 24px rgba(0,0,0,0.35)'; b.style.padding='12px'; b.style.display='flex'; b.style.flexDirection='column'; b.style.gap='12px';
-      const i=document.createElement('img'); i.className='preview-image'; i.style.width='100%'; i.style.height='auto'; i.style.borderRadius='8px'; i.style.objectFit='contain'; i.style.maxHeight='56vh';
-      const a=document.createElement('div'); a.className='preview-actions'; a.style.display='flex'; a.style.justifyContent='flex-end'; a.style.gap='8px'; a.style.pointerEvents='auto';
-      const c=document.createElement('button'); c.textContent='取消'; c.id='previewCancelBtn'; c.type='button'; c.style.minWidth='84px'; c.style.height='32px'; c.style.borderRadius='8px'; c.style.background='#0d2545'; c.style.color='#e6f1ff'; c.style.border='1px solid #1e3b68'; c.style.cursor='pointer';
-      const s=document.createElement('button'); s.textContent='发送图片'; s.id='previewSendBtn'; s.type='button'; s.style.minWidth='96px'; s.style.height='32px'; s.style.borderRadius='8px'; s.style.background='#2e7de9'; s.style.color='#fff'; s.style.border='none'; s.style.cursor='pointer';
-      a.appendChild(c); a.appendChild(s); b.appendChild(i); b.appendChild(a); o.appendChild(b); document.body.appendChild(o); o._img=i; o._send=s; o._cancel=c; 
-      try { c.onclick = (e) => { e && e.stopPropagation && e.stopPropagation(); cancelPreview() } } catch {}
-      try { c.addEventListener('pointerup', (e) => { e.stopPropagation(); cancelPreview() }, { capture: true }) } catch {}
-      try { c.addEventListener('touchend', (e) => { e.stopPropagation(); cancelPreview() }, { capture: true }) } catch {}
-      try { s.onclick = (e) => { e && e.stopPropagation && e.stopPropagation(); sendCurrentFile() } } catch {}
-      try { s.addEventListener('pointerup', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch {}
-      try { s.addEventListener('touchend', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch {}
+      b.style.width = '360px'; b.style.maxWidth = '92vw'; b.style.maxHeight = '80vh'; b.style.background = '#111d33'; b.style.borderRadius = '12px'; b.style.boxShadow = '0 8px 24px rgba(0,0,0,0.35)'; b.style.padding = '12px'; b.style.display = 'flex'; b.style.flexDirection = 'column'; b.style.gap = '12px';
+      const i = document.createElement('img'); i.className = 'preview-image'; i.style.width = '100%'; i.style.height = 'auto'; i.style.borderRadius = '8px'; i.style.objectFit = 'contain'; i.style.maxHeight = '56vh';
+      const a = document.createElement('div'); a.className = 'preview-actions'; a.style.display = 'flex'; a.style.justifyContent = 'flex-end'; a.style.gap = '8px'; a.style.pointerEvents = 'auto';
+      const c = document.createElement('button'); c.textContent = '取消'; c.id = 'previewCancelBtn'; c.type = 'button'; c.style.minWidth = '84px'; c.style.height = '32px'; c.style.borderRadius = '8px'; c.style.background = '#0d2545'; c.style.color = '#e6f1ff'; c.style.border = '1px solid #1e3b68'; c.style.cursor = 'pointer';
+      const s = document.createElement('button'); s.textContent = '发送图片'; s.id = 'previewSendBtn'; s.type = 'button'; s.style.minWidth = '96px'; s.style.height = '32px'; s.style.borderRadius = '8px'; s.style.background = '#2e7de9'; s.style.color = '#fff'; s.style.border = 'none'; s.style.cursor = 'pointer';
+      a.appendChild(c); a.appendChild(s); b.appendChild(i); b.appendChild(a); o.appendChild(b); document.body.appendChild(o); o._img = i; o._send = s; o._cancel = c;
+      try { c.onclick = (e) => { e && e.stopPropagation && e.stopPropagation(); cancelPreview() } } catch { }
+      try { c.addEventListener('pointerup', (e) => { e.stopPropagation(); cancelPreview() }, { capture: true }) } catch { }
+      try { c.addEventListener('touchend', (e) => { e.stopPropagation(); cancelPreview() }, { capture: true }) } catch { }
+      try { s.onclick = (e) => { e && e.stopPropagation && e.stopPropagation(); sendCurrentFile() } } catch { }
+      try { s.addEventListener('pointerup', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch { }
+      try { s.addEventListener('touchend', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch { }
       /* remove overlay-wide click trigger to avoid duplicate sends */
-      try { /* no-op */ } catch {}
-      return o })()
+      try { /* no-op */ } catch { }
+      return o
+    })()
     let pendingFile = null
     let uploading = false
     let uploadAbort = null
     previewOverlay._currentUrl = ''
     function cancelPreview() {
-      try { if (previewOverlay._currentUrl) { URL.revokeObjectURL(previewOverlay._currentUrl); previewOverlay._currentUrl = '' } } catch {}
+      try { if (previewOverlay._currentUrl) { URL.revokeObjectURL(previewOverlay._currentUrl); previewOverlay._currentUrl = '' } } catch { }
       pendingFile = null
       previewOverlay.classList.add('hidden')
-      try { photoInput.value = '' } catch {}
+      try { photoInput.value = '' } catch { }
     }
     async function compressImage(file, { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {}) {
       try {
@@ -156,7 +954,7 @@
         ctx.drawImage(img, 0, 0, w, h)
         const blob = await new Promise(resolve => cvs.toBlob(resolve, 'image/jpeg', quality))
         if (blob) return new File([blob], 'photo.jpg', { type: 'image/jpeg' })
-      } catch {}
+      } catch { }
       return file
     }
     async function sendCurrentFile() {
@@ -166,66 +964,67 @@
           const src = String(previewOverlay && previewOverlay._img && previewOverlay._img.src || '')
           if (src && src.startsWith('blob:')) {
             const rb = await fetch(src).then(r => r.blob())
-            pendingFile = new File([rb], 'image.' + (String(rb.type||'image/png').split('/')[1]||'png'), { type: rb.type||'image/png' })
+            pendingFile = new File([rb], 'image.' + (String(rb.type || 'image/png').split('/')[1] || 'png'), { type: rb.type || 'image/png' })
           }
-        } catch {}
+        } catch { }
         if (!pendingFile) return
       }
       const fd = new FormData(); fd.append('file', pendingFile)
       uploading = true
-      try { if (previewOverlay && previewOverlay._send) previewOverlay._send.disabled = true } catch {}
+      try { if (previewOverlay && previewOverlay._send) previewOverlay._send.disabled = true } catch { }
       if (!currentPhone) {
         let p = (typeof localStorage !== 'undefined' ? (localStorage.getItem('anon_phone') || '') : '') || presetPhone || ''
         if (!p) {
           p = 'anon_' + Date.now()
-          try { if (typeof localStorage !== 'undefined') localStorage.setItem('anon_phone', p) } catch {}
-          try { await fetch('/api/user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: p, name: '', avatar: '' }) }) } catch {}
+          try { if (typeof localStorage !== 'undefined') localStorage.setItem('anon_phone', p) } catch { }
+          try { await fetch('/api/user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: p, name: '', avatar: '' }) }) } catch { }
         }
         currentPhone = p
-        try { socket.emit('join', { phone: currentPhone, role: 'customer' }) } catch {}
+        try { socket.emit('join', { phone: currentPhone, role: 'customer' }) } catch { }
       }
       await ensureCsrf(); const t = getCookie(CSRF_COOKIE)
       let ok = false, data = null, status = 0
       try {
         uploadAbort = new AbortController()
-        const timer = setTimeout(() => { try { uploadAbort.abort() } catch {} }, 15000)
+        const timer = setTimeout(() => { try { uploadAbort.abort() } catch { } }, 15000)
         const u1 = '/api/upload' + (token ? (('?token=' + encodeURIComponent(token))) : '')
         const res = await originalFetch(u1, { method: 'POST', body: fd, headers: { [CSRF_HEADER]: t || '' }, credentials: 'include', signal: uploadAbort.signal })
         clearTimeout(timer)
         status = (res && res.status) || 0
         ok = !!(res && res.ok)
-        try { data = await res.json() } catch {}
-      } catch {}
+        try { data = await res.json() } catch { }
+      } catch { }
       if (!ok) {
         try {
           uploadAbort = new AbortController()
-          const timer = setTimeout(() => { try { uploadAbort.abort() } catch {} }, 12000)
+          const timer = setTimeout(() => { try { uploadAbort.abort() } catch { } }, 12000)
           const abs = (location.origin ? String(location.origin).replace(/\/$/, '') : '') + '/api/upload' + (token ? (('?token=' + encodeURIComponent(token))) : '')
           const res2 = await originalFetch(abs, { method: 'POST', body: fd, headers: { [CSRF_HEADER]: t || '' }, credentials: 'include', signal: uploadAbort.signal })
           clearTimeout(timer)
           status = (res2 && res2.status) || status
           ok = !!(res2 && res2.ok)
-          try { data = await res2.json() } catch {}
-        } catch {}
+          try { data = await res2.json() } catch { }
+        } catch { }
       }
       if (!ok) {
         try {
           const qs = new URLSearchParams(location.search); const base = (qs.get('api') || '').replace(/\/$/, '')
           if (base) {
             uploadAbort = new AbortController()
-            const timer = setTimeout(() => { try { uploadAbort.abort() } catch {} }, 12000)
+            const timer = setTimeout(() => { try { uploadAbort.abort() } catch { } }, 12000)
             const url = base + '/api/upload' + (token ? (('?token=' + encodeURIComponent(token))) : '')
             const res3 = await originalFetch(url, { method: 'POST', body: fd, headers: { [CSRF_HEADER]: t || '' }, credentials: 'include', signal: uploadAbort.signal })
             clearTimeout(timer)
             status = (res3 && res3.status) || status
             ok = !!(res3 && res3.ok)
-            try { data = await res3.json() } catch {}
+            try { data = await res3.json() } catch { }
           }
-        } catch {}
+        } catch { }
       }
       if (ok && data && data.url) {
-        socket.emit('message', { phone: currentPhone, sender: 'customer', content: data.url, type: 'image', reply_to: replyToId })
-        replyToId = null; try { replyPreview.classList.add('hidden') } catch {}
+        const u = (apiBase ? apiBase.replace(/\/$/, '') : '') + '/' + String(data.url).replace(/^\//, '')
+        socket.emit('message', { phone: currentPhone, sender: 'customer', content: u, type: 'image', reply_to: replyToId })
+        replyToId = null; try { replyPreview.classList.add('hidden') } catch { }
         cancelPreview()
       } else {
         const msg = (data && (data.message || data.error)) || ''
@@ -233,20 +1032,20 @@
       }
       uploading = false
       uploadAbort = null
-      try { if (previewOverlay && previewOverlay._send) previewOverlay._send.disabled = false } catch {}
+      try { if (previewOverlay && previewOverlay._send) previewOverlay._send.disabled = false } catch { }
     }
-    try { previewOverlay._cancel.addEventListener('click', cancelPreview) } catch {}
-    try { previewOverlay._send.addEventListener('click', sendCurrentFile) } catch {}
-    try { previewOverlay._send.addEventListener('mouseup', (e)=>{ e.stopPropagation(); sendCurrentFile() }, { capture:true }) } catch {}
-    try { previewOverlay._send.addEventListener('click', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch {}
-    try { previewOverlay._send.addEventListener('mousedown', (e) => { e.stopPropagation(); sendCurrentFile() }) } catch {}
+    try { previewOverlay._cancel.addEventListener('click', cancelPreview) } catch { }
+    try { previewOverlay._send.addEventListener('click', sendCurrentFile) } catch { }
+    try { previewOverlay._send.addEventListener('mouseup', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch { }
+    try { previewOverlay._send.addEventListener('click', (e) => { e.stopPropagation(); sendCurrentFile() }, { capture: true }) } catch { }
+    try { previewOverlay._send.addEventListener('mousedown', (e) => { e.stopPropagation(); sendCurrentFile() }) } catch { }
     try {
       document.addEventListener('click', (e) => {
         const t = e.target
         if (t && t.id === 'previewCancelBtn') { cancelPreview() }
         else if (t && t.id === 'previewSendBtn') { sendCurrentFile() }
       })
-    } catch {}
+    } catch { }
     try {
       window.addEventListener('keydown', (e) => {
         if (!previewOverlay.classList.contains('hidden') && e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -254,29 +1053,29 @@
           sendCurrentFile();
         }
       })
-    } catch {}
+    } catch { }
     function scrollChatToBottom() {
       if (!messagesEl) return
       requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight })
     }
 
-    
+
     let currentPhone = null
     let msgs = []
     let replyToId = null
     let isActive = true
-    
+
     document.addEventListener('visibilitychange', () => { isActive = !document.hidden })
     window.addEventListener('focus', () => { isActive = true })
     window.addEventListener('blur', () => { isActive = false })
     const atBottom = () => (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 10
-    
+
     function scrollToCenterEl(el) {
       if (!el) return
       const top = Math.max(0, el.offsetTop - (messagesEl.clientHeight - el.offsetHeight) / 2)
       messagesEl.scrollTo({ top, behavior: 'smooth' })
     }
-    
+
     function getQuoteText(id) {
       if (!id && id !== 0) return null
       const sid = String(id)
@@ -317,15 +1116,15 @@
     try {
       previewOverlay._cancel.textContent = isEsLang ? 'Cancelar' : (isEnLang ? 'Cancel' : '取消')
       previewOverlay._send.textContent = isEsLang ? 'Enviar foto' : (isEnLang ? 'Send photo' : '发送图片')
-    } catch {}
+    } catch { }
 
-function renderMessage(m) {
+    function renderMessage(m) {
       try {
         if (m && m.sender === 'customer') {
           const lastLocal = messagesEl.querySelector('.msg.me[data-local="1"]')
           if (lastLocal && lastLocal.textContent === (m.content || '')) { lastLocal.remove() }
         }
-      } catch {}
+      } catch { }
       if (m.type === 'recall') return
       const div = document.createElement('div')
       div.className = m.sender === 'customer' ? 'msg me' : 'msg other'
@@ -420,11 +1219,11 @@ function renderMessage(m) {
       if (chatEl) { chatEl.classList.remove('hidden') }
       socket.emit('join', { phone: currentPhone, role: 'customer' })
       const initialMsgs = await fetch('/api/messages/' + encodeURIComponent(currentPhone)).then(r => r.json()).catch(() => [])
-      ;(Array.isArray(initialMsgs) ? initialMsgs : []).forEach(renderMessage)
+        ; (Array.isArray(initialMsgs) ? initialMsgs : []).forEach(renderMessage)
       setTimeout(scrollChatToBottom, 0)
       if (isActive && atBottom()) socket.emit('seen', { phone: currentPhone })
       const tryEmitSeen = () => { if (isActive && atBottom()) socket.emit('seen', { phone: currentPhone }) }
-      
+
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.matchMedia('(pointer: coarse)').matches
       messagesEl.addEventListener('scroll', tryEmitSeen)
       window.addEventListener('focus', tryEmitSeen)
@@ -451,7 +1250,7 @@ function renderMessage(m) {
       }
       messageInput.addEventListener('input', updateComposerHeight)
       window.addEventListener('resize', updateComposerHeight)
-      
+
       emojiBtn.onclick = (e) => {
         e.stopPropagation()
         emojiMenu.classList.toggle('hidden')
@@ -478,21 +1277,21 @@ function renderMessage(m) {
         if (!f) return
         const f2 = (f.size > 5 * 1024 * 1024) ? await compressImage(f) : f
         pendingFile = f2
-        try { const u = URL.createObjectURL(f2); previewOverlay._currentUrl = u; previewOverlay._img.src = u } catch {}
+        try { const u = URL.createObjectURL(f2); previewOverlay._currentUrl = u; previewOverlay._img.src = u } catch { }
         previewOverlay.classList.remove('hidden')
         plusMenu.classList.add('hidden')
       }
-      }
-      socket.on('message', m => {
-        renderMessage(m)
-        if (m.sender === 'agent' && isActive && atBottom()) socket.emit('seen', { phone: currentPhone })
-      })
-  socket.on('recalled', r => {
-    const el = messagesEl.querySelector('[data-id="' + r.id + '"]')
-    if (!el) return
-    el.remove()
-    msgs = msgs.filter(x => x.id !== r.id)
-  })
+    }
+    socket.on('message', m => {
+      renderMessage(m)
+      if (m.sender === 'agent' && isActive && atBottom()) socket.emit('seen', { phone: currentPhone })
+    })
+    socket.on('recalled', r => {
+      const el = messagesEl.querySelector('[data-id="' + r.id + '"]')
+      if (!el) return
+      el.remove()
+      msgs = msgs.filter(x => x.id !== r.id)
+    })
     // 语言与文案（仅支持 es/en）
     const isEs = langParam === 'es'
     const isEn = langParam === 'en'
@@ -502,7 +1301,7 @@ function renderMessage(m) {
     messageInput.placeholder = placeholderParam ? decodeURIComponent(placeholderParam) : (isEs ? 'Escribir mensaje' : 'Enter message')
     // 发送按钮显示图标，不使用文字
     backBtn.onclick = () => {
-      try { window.close(); } catch {}
+      try { window.close(); } catch { }
       try {
         if (window.history && typeof window.history.back === 'function') {
           window.history.back()
@@ -511,10 +1310,10 @@ function renderMessage(m) {
         }
       } catch { location.href = '/me' }
     }
-  
-  if (presetPhone) {
-    startChat(presetPhone, presetName || '', presetAvatar || '')
-  }
+
+    if (presetPhone) {
+      startChat(presetPhone, presetName || '', presetAvatar || '')
+    }
     let replyPreview
     let replyText
     let replyCancel
@@ -564,7 +1363,7 @@ function renderMessage(m) {
         }
         currentPhone = p
         socket.emit('join', { phone: currentPhone, role: 'customer' })
-        try { if (chatEl) chatEl.classList.remove('hidden') } catch {}
+        try { if (chatEl) chatEl.classList.remove('hidden') } catch { }
       }
       socket.emit('message', { phone: currentPhone, sender: 'customer', content, reply_to: replyToId })
       try {
@@ -578,12 +1377,12 @@ function renderMessage(m) {
         div.appendChild(txt)
         messagesEl.appendChild(div)
         msgs.push(mlocal)
-      } catch {}
+      } catch { }
       messageInput.value = ''
       messageInput.style.height = 'auto'
-      try { updateComposerHeight() } catch {}
+      try { updateComposerHeight() } catch { }
       replyToId = null
-      try { if (replyPreview) replyPreview.classList.add('hidden') } catch {}
+      try { if (replyPreview) replyPreview.classList.add('hidden') } catch { }
       scrollChatToBottom()
     }
     messageInput.addEventListener('keydown', e => {
@@ -594,4 +1393,5 @@ function renderMessage(m) {
     })
   </script>
 </body>
+
 </html>

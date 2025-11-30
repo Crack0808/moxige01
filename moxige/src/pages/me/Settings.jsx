@@ -12,7 +12,7 @@ function readUsers() {
   try { return JSON.parse(localStorage.getItem("users") || "[]"); } catch { return []; }
 }
 function saveUsers(list) {
-  try { localStorage.setItem("users", JSON.stringify(list)); } catch {}
+  try { localStorage.setItem("users", JSON.stringify(list)); } catch { }
 }
 
 export default function Settings() {
@@ -62,9 +62,9 @@ export default function Settings() {
       try {
         const mirror = readUsers().find(u => u.phone === session.phone);
         if (mirror?.password && /^\d{10}$/.test(String(session.phone))) {
-          loginPhone({ phone: session.phone, password: mirror.password }).catch(() => {});
+          loginPhone({ phone: session.phone, password: mirror.password }).catch(() => { });
         }
-      } catch {}
+      } catch { }
     }
   }, [session]);
 
@@ -75,7 +75,7 @@ export default function Settings() {
     const reader = new FileReader();
     reader.onload = async () => {
       const base64 = reader.result;
-      try { await api.post('/me/avatar', { data: base64 }); } catch {}
+      try { await api.post('/me/avatar', { data: base64 }); } catch { }
       setAvatarUrl(base64);
       try {
         const meData = await api.get('/me');
@@ -87,7 +87,7 @@ export default function Settings() {
           saveUsers(next);
           setUsers(next);
         }
-      } catch {}
+      } catch { }
     };
     reader.readAsDataURL(file);
   };
@@ -103,7 +103,7 @@ export default function Settings() {
       saveUsers(next);
       setUsers(next);
       const s = { ...session, name: v };
-      try { localStorage.setItem('sessionUser', JSON.stringify(s)); } catch {}
+      try { localStorage.setItem('sessionUser', JSON.stringify(s)); } catch { }
       setSession(s);
       showToast(t('successNameUpdated'), 'ok');
       return true;
@@ -126,7 +126,7 @@ export default function Settings() {
       saveUsers(next);
       setUsers(next);
       const s = { ...session, password: newPwd };
-      try { localStorage.setItem('sessionUser', JSON.stringify(s)); } catch {}
+      try { localStorage.setItem('sessionUser', JSON.stringify(s)); } catch { }
       setSession(s);
       showToast(t('successLoginPasswordUpdated'), 'ok');
       setOldPwd(''); setNewPwd(''); setConfirmPwd('');
@@ -182,10 +182,10 @@ export default function Settings() {
   const [kycSubmitting, setKycSubmitting] = useState(false);
   const kycFileRefs = [useRef(null), useRef(null)];
   useEffect(() => { setKycName(user?.name || ''); }, [user?.name]);
-  useEffect(() => { (async () => { try { const data = await api.get('/me/kyc/status'); let s = String((data?.status || '')).toLowerCase(); if (!s) s = 'none'; if (s === 'none') s = 'unverified'; setKycStatus(s); try { localStorage.setItem('kyc:status', s); } catch {} } catch {} })(); }, []);
+  useEffect(() => { (async () => { try { const data = await api.get('/me/kyc/status'); let s = String((data?.status || '')).toLowerCase(); if (!s) s = 'none'; if (s === 'none') s = 'unverified'; setKycStatus(s); try { localStorage.setItem('kyc:status', s); } catch { } } catch { } })(); }, []);
   const openKycModal = () => {
     if (String(kycStatus).toLowerCase() === 'submitted') {
-      showToast(lang==='zh'?'正在审核中':(lang==='es'?'En revisión':'Under review'), 'info');
+      showToast(lang === 'zh' ? '正在审核中' : (lang === 'es' ? 'En revisión' : 'Under review'), 'info');
       return;
     }
     setKycName(user?.name || ''); setKycDocType('passport'); setKycDocNo(''); setKycImages([]); setModal({ type: 'kyc' });
@@ -223,9 +223,9 @@ export default function Settings() {
     try {
       const dataUrl = await compressImageFile(f);
       const approxBytes = Math.ceil((dataUrl.length || 0) * 3 / 4);
-      if (approxBytes > 18 * 1024 * 1024) { showToast(lang==='zh'?'图片过大':(lang==='es'?'Imagen demasiado grande':'Image too large'), 'error'); return; }
-      setKycImages(prev => { const arr = [...prev]; arr[i] = dataUrl; return arr.slice(0,2); });
-    } catch { showToast(lang==='zh'?'图片处理失败':(lang==='es'?'Error al procesar imagen':'Image processing failed'), 'error'); }
+      if (approxBytes > 18 * 1024 * 1024) { showToast(lang === 'zh' ? '图片过大' : (lang === 'es' ? 'Imagen demasiado grande' : 'Image too large'), 'error'); return; }
+      setKycImages(prev => { const arr = [...prev]; arr[i] = dataUrl; return arr.slice(0, 2); });
+    } catch { showToast(lang === 'zh' ? '图片处理失败' : (lang === 'es' ? 'Error al procesar imagen' : 'Image processing failed'), 'error'); }
   };
   const submitKyc = async () => {
     const nm = String(kycName || '').trim();
@@ -234,29 +234,29 @@ export default function Settings() {
     if (nm.length < 2) { showToast(t('errorNameLength'), 'error'); return; }
     if (!dt) { showToast(t('fetchError'), 'error'); return; }
     if (!dn) { showToast(t('fetchError'), 'error'); return; }
-    const photos = (Array.isArray(kycImages) ? kycImages.filter(Boolean).slice(0,2) : []).map(u => ({ url: u, thumbUrl: u }));
+    const photos = (Array.isArray(kycImages) ? kycImages.filter(Boolean).slice(0, 2) : []).map(u => ({ url: u, thumbUrl: u }));
     if (photos.length === 0) { showToast(t('fetchError'), 'error'); return; }
     try {
       setKycSubmitting(true);
       await api.post('/me/kyc/submit', { fields: { name: nm, idType: dt, idNumber: dn }, photos });
       setKycStatus('submitted');
-      try { localStorage.setItem('kyc:status', 'submitted'); } catch {}
-      showToast(lang==='es' ? 'Enviado para revisión' : 'Submitted for review', 'ok');
+      try { localStorage.setItem('kyc:status', 'submitted'); } catch { }
+      showToast(lang === 'es' ? 'Enviado para revisión' : 'Submitted for review', 'ok');
       setModal({ type: null });
     } catch (e) {
       const raw = String(e?.message || 'Failed');
-      const msg = raw.toLowerCase().includes('payload_too_large') ? (lang==='zh'?'图片过大':(lang==='es'?'Imagen demasiado grande':'Image too large')) : String(e?.message || 'Failed');
+      const msg = raw.toLowerCase().includes('payload_too_large') ? (lang === 'zh' ? '图片过大' : (lang === 'es' ? 'Imagen demasiado grande' : 'Image too large')) : String(e?.message || 'Failed');
       if (/pending\s*review|submitted/i.test(msg)) {
         setKycStatus('submitted');
-        try { localStorage.setItem('kyc:status', 'submitted'); } catch {}
-        showToast(lang==='zh' ? '已提交审核，请等待' : (lang==='es' ? 'En revisión' : 'Already submitted, pending review'), 'warn');
+        try { localStorage.setItem('kyc:status', 'submitted'); } catch { }
+        showToast(lang === 'zh' ? '已提交审核，请等待' : (lang === 'es' ? 'En revisión' : 'Already submitted, pending review'), 'warn');
         setModal({ type: null });
         return;
       }
       if (/already\s*approved/i.test(msg)) {
         setKycStatus('approved');
-        try { localStorage.setItem('kyc:status', 'approved'); } catch {}
-        showToast(lang==='zh' ? '已通过，无需重复提交' : (lang==='es' ? 'Aprobado, no es necesario reenviar' : 'Already approved'), 'ok');
+        try { localStorage.setItem('kyc:status', 'approved'); } catch { }
+        showToast(lang === 'zh' ? '已通过，无需重复提交' : (lang === 'es' ? 'Aprobado, no es necesario reenviar' : 'Already approved'), 'ok');
         setModal({ type: null });
         return;
       }
@@ -269,12 +269,12 @@ export default function Settings() {
   // 客服入口：打开 IM 系统的 customer.html，并传入当前用户手机号/昵称/头像
   const openCustomerSupport = () => {
     const base = (() => {
-      try { const v = String(localStorage.getItem('im:base') || '').trim(); if (v) return v; } catch {}
-      try { const v = String(import.meta.env?.VITE_IM_BASE || '').trim(); if (v) return v; } catch {}
-      return 'http://127.0.0.1:3000';
+      try { const v = String(localStorage.getItem('im:base') || '').trim(); if (v) return v; } catch { }
+      try { const v = String(import.meta.env?.VITE_IM_BASE || '').trim(); if (v) return v; } catch { }
+      return '/im-api';
     })();
-    try { localStorage.setItem('im:base', base); } catch {}
-    const ver = (() => { try { return String(localStorage.getItem('buildVersion')||'') } catch { return '' } })() || String(Date.now())
+    try { localStorage.setItem('im:base', base); } catch { }
+    const ver = (() => { try { return String(localStorage.getItem('buildVersion') || '') } catch { return '' } })() || String(Date.now())
     const url = `${String(base).replace(/\/$/, '')}/customer.html?phone=${encodeURIComponent(phone || '')}&name=${encodeURIComponent(name || '')}&avatar=${encodeURIComponent(avatarUrl || '')}&v=${encodeURIComponent(ver)}`;
     window.open(url, 'customer_chat', 'width=460,height=720');
   };
@@ -298,7 +298,7 @@ export default function Settings() {
             {/* 姓名：左右布局，点击右侧弹出修改弹窗 */}
             <div className="settings-item">
               <div className="item-label">{t('nameLabel')}</div>
-              <button className="item-value-btn" onClick={() => openModal('name')}>{name || (lang==='es'?'Sin configurar':'Not set')}</button>
+              <button className="item-value-btn" onClick={() => openModal('name')}>{name || (lang === 'es' ? 'Sin configurar' : 'Not set')}</button>
             </div>
 
             {/* 手机号码：只读显示 */}
@@ -321,10 +321,10 @@ export default function Settings() {
             <div className="settings-item">
               <div className="item-label">{t('kycTitle')}</div>
               {kycStatus === 'approved' ? (
-                <div className="item-value-text">{lang==='es'?'Verificado':'Verified'}</div>
+                <div className="item-value-text">{lang === 'es' ? 'Verificado' : 'Verified'}</div>
               ) : (
                 <button className="item-value-btn" onClick={openKycModal}>
-                  {kycStatus === 'submitted' ? (lang==='es'?'En revisión':'Under review') : (lang==='es'?'No verificado':'Not verified')}
+                  {kycStatus === 'submitted' ? (lang === 'es' ? 'En revisión' : 'Under review') : (lang === 'es' ? 'No verificado' : 'Not verified')}
                 </button>
               )}
             </div>
@@ -335,7 +335,7 @@ export default function Settings() {
               </button>
             </div>
             <div className="sub-actions" style={{ justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={()=>nav('/me')}>{t('btnBackProfile')}</button>
+              <button className="btn" onClick={() => nav('/me')}>{t('btnBackProfile')}</button>
             </div>
           </div>
         </div>
@@ -348,7 +348,7 @@ export default function Settings() {
           <div className="modal-card">
             <h2 className="title" style={{ marginTop: 0 }}>{t('changeNameTitle')}</h2>
             <div className="form">
-              <input className="input" value={name} onChange={e=>setName(e.target.value)} placeholder={t('placeholderName')} />
+              <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder={t('placeholderName')} />
               <div className="sub-actions" style={{ justifyContent: 'flex-end', gap: 10 }}>
                 <button className="btn" onClick={closeModal}>{t('cancel')}</button>
                 <button className="btn primary" onClick={async () => { const ok = await onSaveName(); if (ok) closeModal(); }}>{t('confirm')}</button>
@@ -365,11 +365,11 @@ export default function Settings() {
             <h2 className="title" style={{ marginTop: 0 }}>{t('changePassword')}</h2>
             <div className="form">
               <div className="label">{t('currentPassword')}</div>
-              <input className="input" type="password" placeholder={t('currentPassword')} value={oldPwd} onChange={e=>setOldPwd(e.target.value)} />
+              <input className="input" type="password" placeholder={t('currentPassword')} value={oldPwd} onChange={e => setOldPwd(e.target.value)} />
               <div className="label">{t('placeholderNewPassword')}</div>
-              <input className="input" type="password" placeholder={t('placeholderNewPassword')} value={newPwd} onChange={e=>setNewPwd(e.target.value)} />
+              <input className="input" type="password" placeholder={t('placeholderNewPassword')} value={newPwd} onChange={e => setNewPwd(e.target.value)} />
               <div className="label">{t('placeholderConfirm')}</div>
-              <input className="input" type="password" placeholder={t('placeholderConfirm')} value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value)} />
+              <input className="input" type="password" placeholder={t('placeholderConfirm')} value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} />
               <div className="sub-actions" style={{ justifyContent: 'flex-end', gap: 10 }}>
                 <button className="btn" onClick={closeModal}>{t('cancel')}</button>
                 <button className="btn primary" disabled={pwdSaving} onClick={async () => { const ok = await onChangeLoginPassword(); if (ok) closeModal(); }}>{pwdSaving ? t('saving') : t('confirm')}</button>
@@ -386,14 +386,14 @@ export default function Settings() {
             <h2 className="title" style={{ marginTop: 0 }}>{t('changeTradePinTitle')}</h2>
             <div className="form">
               <div className="label">{t('verifyWithLoginPassword')}</div>
-              <input className="input" type="password" placeholder={t('verifyWithLoginPassword')} value={loginPwdForTrade} onChange={e=>setLoginPwdForTrade(e.target.value)} />
+              <input className="input" type="password" placeholder={t('verifyWithLoginPassword')} value={loginPwdForTrade} onChange={e => setLoginPwdForTrade(e.target.value)} />
               <div className="label">{t('placeholderNewPin')}</div>
-              <input className="input" inputMode="numeric" pattern="\\d{6}" maxLength={6} type="password" placeholder={t('placeholderNewPin')} value={newTradePwd} onChange={e=>setNewTradePwd(e.target.value.replace(/\D/g, '').slice(0,6))} />
+              <input className="input" inputMode="numeric" pattern="\\d{6}" maxLength={6} type="password" placeholder={t('placeholderNewPin')} value={newTradePwd} onChange={e => setNewTradePwd(e.target.value.replace(/\D/g, '').slice(0, 6))} />
               <div className="label">{t('placeholderConfirm')}</div>
-              <input className="input" inputMode="numeric" pattern="\\d{6}" maxLength={6} type="password" placeholder={t('placeholderConfirm')} value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value.replace(/\D/g, '').slice(0,6))} />
+              <input className="input" inputMode="numeric" pattern="\\d{6}" maxLength={6} type="password" placeholder={t('placeholderConfirm')} value={confirmPwd} onChange={e => setConfirmPwd(e.target.value.replace(/\D/g, '').slice(0, 6))} />
               <div className="sub-actions" style={{ justifyContent: 'flex-end', gap: 10 }}>
                 <button className="btn" onClick={closeModal}>{t('cancel')}</button>
-                <button className="btn primary" disabled={tradeSaving} onClick={async () => { if (newTradePwd.replace(/\D/g,'') !== confirmPwd.replace(/\D/g,'')) { showToast(t('errorConfirmMismatch'), 'error'); return; } const ok = await onChangeTradePassword(); if (ok) closeModal(); }}>{tradeSaving ? t('saving') : t('confirm')}</button>
+                <button className="btn primary" disabled={tradeSaving} onClick={async () => { if (newTradePwd.replace(/\D/g, '') !== confirmPwd.replace(/\D/g, '')) { showToast(t('errorConfirmMismatch'), 'error'); return; } const ok = await onChangeTradePassword(); if (ok) closeModal(); }}>{tradeSaving ? t('saving') : t('confirm')}</button>
               </div>
             </div>
           </div>
@@ -406,8 +406,8 @@ export default function Settings() {
           <div className="modal-card">
             <h2 className="title" style={{ marginTop: 0 }}>{t('chooseLanguage')}</h2>
             <div className="form" style={{ display: 'flex', gap: 10 }}>
-              <button className={`btn ${lang==='es'?'primary':''}`} onClick={async () => { try { await api.post('/me/lang', { lang: 'es' }); } catch {} setLang('es'); closeModal(); }}>Español</button>
-              <button className={`btn ${lang==='en'?'primary':''}`} onClick={async () => { try { await api.post('/me/lang', { lang: 'en' }); } catch {} setLang('en'); closeModal(); }}>English</button>
+              <button className={`btn ${lang === 'es' ? 'primary' : ''}`} onClick={async () => { try { await api.post('/me/lang', { lang: 'es' }); } catch { } setLang('es'); closeModal(); }}>Español</button>
+              <button className={`btn ${lang === 'en' ? 'primary' : ''}`} onClick={async () => { try { await api.post('/me/lang', { lang: 'en' }); } catch { } setLang('en'); closeModal(); }}>English</button>
             </div>
             <div className="desc" style={{ marginTop: 8 }}>{t('langSwitchInstant')}</div>
           </div>
@@ -419,25 +419,25 @@ export default function Settings() {
             <h2 className="title" style={{ marginTop: 0 }}>{t('kycTitle')}</h2>
             <div className="form">
               <div className="label">{t('nameLabel')}</div>
-              <input className="input" value={kycName} onChange={e=>setKycName(e.target.value)} />
-              <div className="label">{lang==='es'?'Tipo de documento':'Document Type'}</div>
-              <select className="input" value={kycDocType} onChange={e=>setKycDocType(e.target.value)}>
-                <option value="passport">{lang==='es'?'Pasaporte':'Passport'}</option>
-                <option value="dni">{lang==='es'?'Identificación':'ID'}</option>
-                <option value="dl">{lang==='es'?'Licencia':'Driver License'}</option>
+              <input className="input" value={kycName} onChange={e => setKycName(e.target.value)} />
+              <div className="label">{lang === 'es' ? 'Tipo de documento' : 'Document Type'}</div>
+              <select className="input" value={kycDocType} onChange={e => setKycDocType(e.target.value)}>
+                <option value="passport">{lang === 'es' ? 'Pasaporte' : 'Passport'}</option>
+                <option value="dni">{lang === 'es' ? 'Identificación' : 'ID'}</option>
+                <option value="dl">{lang === 'es' ? 'Licencia' : 'Driver License'}</option>
               </select>
-              <div className="label">{lang==='es'?'Número de documento':'Document Number'}</div>
-              <input className="input" value={kycDocNo} onChange={e=>setKycDocNo(e.target.value)} />
-              <div className="desc" style={{ marginTop: 8 }}>{lang==='es'?'Carga la foto correspondiente del documento':'Please upload the corresponding document photo'}</div>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8 }}>
-                {[0,1].map((i)=> (
-                  <div key={i} style={{ width:80, height:80, border:'1px dashed #263b5e', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }} onClick={()=>{ if (String(kycStatus).toLowerCase()==='submitted') { showToast(lang==='zh'?'正在审核中':(lang==='es'?'En revisión':'Under review'), 'info'); return; } kycFileRefs[i].current?.click(); }}>
-                    {kycImages[i] ? (<img src={kycImages[i]} alt="doc" style={{ width:80, height:80, objectFit:'cover', borderRadius:10, border:'1px solid #263b5e' }} />) : '+'}
-                    <input ref={kycFileRefs[i]} type="file" accept="image/*" onChange={(e)=>onKycFileAt(i, e)} style={{ display:'none' }} />
+              <div className="label">{lang === 'es' ? 'Número de documento' : 'Document Number'}</div>
+              <input className="input" value={kycDocNo} onChange={e => setKycDocNo(e.target.value)} />
+              <div className="desc" style={{ marginTop: 8 }}>{lang === 'es' ? 'Carga la foto correspondiente del documento' : 'Please upload the corresponding document photo'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                {[0, 1].map((i) => (
+                  <div key={i} style={{ width: 80, height: 80, border: '1px dashed #263b5e', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => { if (String(kycStatus).toLowerCase() === 'submitted') { showToast(lang === 'zh' ? '正在审核中' : (lang === 'es' ? 'En revisión' : 'Under review'), 'info'); return; } kycFileRefs[i].current?.click(); }}>
+                    {kycImages[i] ? (<img src={kycImages[i]} alt="doc" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, border: '1px solid #263b5e' }} />) : '+'}
+                    <input ref={kycFileRefs[i]} type="file" accept="image/*" onChange={(e) => onKycFileAt(i, e)} style={{ display: 'none' }} />
                   </div>
                 ))}
               </div>
-              <div className="sub-actions" style={{ justifyContent:'space-between' }}>
+              <div className="sub-actions" style={{ justifyContent: 'space-between' }}>
                 <button className="btn" onClick={closeModal}>{t('cancel')}</button>
                 <button className="btn primary" disabled={kycSubmitting} onClick={submitKyc}>{kycSubmitting ? t('saving') : t('confirm')}</button>
               </div>

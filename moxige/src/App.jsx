@@ -24,6 +24,7 @@ import Bridge from "./pages/Bridge.jsx";
 import { LanguageProvider, useI18n } from "./i18n.jsx";
 import { waitForHealth } from "./services/api.js";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import ChatNotification from "./components/ChatNotification.jsx";
 
 // 语言切换移至账户设置页，此处移除顶部语言切换组件
 
@@ -51,7 +52,7 @@ function detectAdminEnv() {
       const adminParam = params.get('admin');
       if (adminParam === '0') return false; // 显式关闭后台环境
       byQuery = adminParam === '1';
-    } catch {}
+    } catch { }
     const byLS = (() => { try { return localStorage.getItem('force:admin') === '1' || localStorage.getItem('admin:env') === '1'; } catch { return false; } })();
     const byHost = host === "super.kudafn.com" || host.startsWith("super.");
     const byEnv = String(import.meta.env?.VITE_ADMIN_ENV || "").trim() === "1";
@@ -90,19 +91,19 @@ export default function App() {
       const tdkey = params.get("tdkey");
       if (tdkey) {
         // 支持多种 localStorage 键名，便于 getTDKey() 读取
-        try { localStorage.setItem("td:key", tdkey); } catch {}
-        try { localStorage.setItem("VITE_TWELVEDATA_KEY", tdkey); } catch {}
-        try { localStorage.setItem("VITE_TWELVE_DATA_KEY", tdkey); } catch {}
-        try { localStorage.setItem("VITE_TD_KEY", tdkey); } catch {}
-        try { localStorage.setItem("VITE_TD_KEY_OVERRIDE", tdkey); } catch {}
+        try { localStorage.setItem("td:key", tdkey); } catch { }
+        try { localStorage.setItem("VITE_TWELVEDATA_KEY", tdkey); } catch { }
+        try { localStorage.setItem("VITE_TWELVE_DATA_KEY", tdkey); } catch { }
+        try { localStorage.setItem("VITE_TD_KEY", tdkey); } catch { }
+        try { localStorage.setItem("VITE_TD_KEY_OVERRIDE", tdkey); } catch { }
       }
       // 部署环境：如已在构建时注入 env，则同步到本地存储，保障运行时取值
       try {
         const envKey = import.meta.env?.VITE_TWELVEDATA_KEY || import.meta.env?.VITE_TWELVE_DATA_KEY || import.meta.env?.VITE_TD_KEY || import.meta.env?.VITE_TD_KEY_OVERRIDE;
         const hasLs = localStorage.getItem('td:key');
         if (envKey && !hasLs) { localStorage.setItem('td:key', String(envKey)); }
-      } catch {}
-    } catch {}
+      } catch { }
+    } catch { }
   }, []);
   useEffect(() => {
     let stopped = false;
@@ -133,10 +134,10 @@ export default function App() {
     };
     return (
       <LanguageProvider>
-        <div className={isAdminEnv ? "app admin-app" : "app"} style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ textAlign:'center', color:'#9eb0c7' }}>
-            <div style={{ fontSize:18, marginBottom:8 }}>{t('loading') || '正在连接服务…'}</div>
-            <button onClick={retry} disabled={retrying} style={{ padding:'8px 14px', borderRadius:6, background:'#1e2a3a', color:'#cfe1ff', border:'1px solid #2f3e52' }}>{retrying ? (t('loading') || '正在连接…') : (t('retry') || '重试连接')}</button>
+        <div className={isAdminEnv ? "app admin-app" : "app"} style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center', color: '#9eb0c7' }}>
+            <div style={{ fontSize: 18, marginBottom: 8 }}>{t('loading') || '正在连接服务…'}</div>
+            <button onClick={retry} disabled={retrying} style={{ padding: '8px 14px', borderRadius: 6, background: '#1e2a3a', color: '#cfe1ff', border: '1px solid #2f3e52' }}>{retrying ? (t('loading') || '正在连接…') : (t('retry') || '重试连接')}</button>
           </div>
         </div>
       </LanguageProvider>
@@ -144,8 +145,9 @@ export default function App() {
   }
   return (
     <LanguageProvider>
-      <div className={isAdminEnv ? "app admin-app" : "app"} style={isAdminEnv ? { display: 'block', padding: 0, alignItems: 'stretch', justifyContent: 'flex-start', overflow: 'visible' } : undefined }>
+      <div className={isAdminEnv ? "app admin-app" : "app"} style={isAdminEnv ? { display: 'block', padding: 0, alignItems: 'stretch', justifyContent: 'flex-start', overflow: 'visible' } : undefined}>
         <ErrorBoundary>
+          {!isAdminEnv && <ChatNotification />}
           <Routes>
             {isAdminEnv ? (
               <>
@@ -178,18 +180,18 @@ export default function App() {
                 <Route path="/me/cards" element={<RequireAuth><MeBankCards /></RequireAuth>} />
                 <Route path="/me/bank-cards" element={<Navigate to="/me/cards" replace />} />
                 <Route path="/me/wallets" element={<MeWallets />} />
-              <Route path="/me/support" element={<MeSupport />} />
-              {/* 已移除机构页，保留重定向到 /me 以避免 404 */}
-              <Route path="/me/institution" element={<RequireAuth><MeInstitution /></RequireAuth>} />
-              
-              {/* 机构 - 大宗交易列表页 */}
-              <Route path="/institution/blocks" element={<RequireAuth><InstitutionBlocks /></RequireAuth>} />
-              {/* 机构 - 基金列表页 */}
-              <Route path="/institution/funds" element={<RequireAuth><InstitutionFunds /></RequireAuth>} />
-              {/* 机构 - IPO/RWA 列表页 */}
-              <Route path="/institution/ipo-rwa" element={<RequireAuth><IpoRwaPage /></RequireAuth>} />
-              {/* 机构页别名：/my-institution 重定向到 /me/institution */}
-              <Route path="/my-institution" element={<Navigate to="/me/institution" replace />} />
+                <Route path="/me/support" element={<MeSupport />} />
+                {/* 已移除机构页，保留重定向到 /me 以避免 404 */}
+                <Route path="/me/institution" element={<RequireAuth><MeInstitution /></RequireAuth>} />
+
+                {/* 机构 - 大宗交易列表页 */}
+                <Route path="/institution/blocks" element={<RequireAuth><InstitutionBlocks /></RequireAuth>} />
+                {/* 机构 - 基金列表页 */}
+                <Route path="/institution/funds" element={<RequireAuth><InstitutionFunds /></RequireAuth>} />
+                {/* 机构 - IPO/RWA 列表页 */}
+                <Route path="/institution/ipo-rwa" element={<RequireAuth><IpoRwaPage /></RequireAuth>} />
+                {/* 机构页别名：/my-institution 重定向到 /me/institution */}
+                <Route path="/my-institution" element={<Navigate to="/me/institution" replace />} />
                 <Route path="/me/withdraw" element={<RequireAuth><MeWithdraw /></RequireAuth>} />
                 <Route path="/me/withdraw/records" element={<RequireAuth><MeWithdrawRecords /></RequireAuth>} />
                 <Route path="/" element={<Navigate to="/home" replace />} />

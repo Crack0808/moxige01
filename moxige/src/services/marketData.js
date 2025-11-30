@@ -45,7 +45,7 @@ const DEBUG_LOG = (() => {
     return env === "1" || ls === "1";
   } catch { return false; }
 })();
-const LOG = (...args) => { try { console.log(...args); } catch {} };
+const LOG = (...args) => { try { console.log(...args); } catch { } };
 // Yahoo/AlphaVantage 回退关闭：统一 TwelveData
 const ENABLE_YF = false;
 const PREFER_YF_MX = false;
@@ -63,6 +63,10 @@ function has(key) {
 }
 
 function getTDKey() {
+  // Hardcoded override from user request
+  const hardcoded = "4adb66b600ef448ab803a3ae0590fcdc";
+  if (hardcoded) return hardcoded;
+
   // Env candidates
   try {
     const envKey =
@@ -71,26 +75,26 @@ function getTDKey() {
       import.meta.env.VITE_TD_KEY ||
       import.meta.env.VITE_TD_KEY_OVERRIDE;
     if (envKey) return envKey;
-  } catch {}
+  } catch { }
   // Server-injected window variable
   try {
     const w = typeof window !== 'undefined' ? window : undefined;
     const k = w && w.__TD_KEY__ ? String(w.__TD_KEY__).trim() : '';
     if (k) return k;
-  } catch {}
+  } catch { }
   // Server-injected meta tag
   try {
     const m = typeof document !== 'undefined' ? document.querySelector('meta[name="td-key"]') : null;
     const c = m && m.getAttribute('content') ? String(m.getAttribute('content')).trim() : '';
     if (c) return c;
-  } catch {}
+  } catch { }
   // Cookie
   try {
     const m = (typeof document !== 'undefined' ? document.cookie : '') || '';
     const match = m.match(/(?:^|; )td_key=([^;]+)/);
     const v = match ? decodeURIComponent(match[1]) : '';
     if (v) return v;
-  } catch {}
+  } catch { }
   // URL query param
   try {
     const loc = typeof window !== 'undefined' ? window.location : undefined;
@@ -99,11 +103,11 @@ function getTDKey() {
       const p = new URLSearchParams(qs);
       const v = String(p.get('tdkey') || '').trim();
       if (v) {
-        try { localStorage.setItem('td:key', v); } catch {}
+        try { localStorage.setItem('td:key', v); } catch { }
         return v;
       }
     }
-  } catch {}
+  } catch { }
   // LocalStorage candidates
   try {
     const lsKey =
@@ -113,7 +117,7 @@ function getTDKey() {
       localStorage.getItem("VITE_TD_KEY") ||
       localStorage.getItem("VITE_TD_KEY_OVERRIDE");
     if (lsKey) return lsKey;
-  } catch {}
+  } catch { }
   return undefined;
 }
 
@@ -124,7 +128,7 @@ function getAVKey() {
       import.meta.env.VITE_ALPHAVANTAGE_KEY ||
       import.meta.env.VITE_AV_KEY;
     if (envKey) return envKey;
-  } catch {}
+  } catch { }
   // LocalStorage candidates
   try {
     const lsKey =
@@ -132,7 +136,7 @@ function getAVKey() {
       localStorage.getItem("VITE_ALPHAVANTAGE_KEY") ||
       localStorage.getItem("VITE_AV_KEY");
     if (lsKey) return lsKey;
-  } catch {}
+  } catch { }
   return undefined;
 }
 
@@ -182,7 +186,7 @@ async function fetchCustomIndexQuotes(symbols) {
         volume: j.volume ?? j.regularMarketVolume,
       })).filter(Boolean);
     }
-  } catch {}
+  } catch { }
   // Fallback: per-symbol endpoint
   const out = [];
   for (const sym of symbols) {
@@ -199,7 +203,7 @@ async function fetchCustomIndexQuotes(symbols) {
           volume: j.volume ?? j.regularMarketVolume,
         }));
       }
-    } catch {}
+    } catch { }
   }
   return out;
 }
@@ -239,7 +243,7 @@ async function fetchTwelveDataQuotes(symbols, market) {
           continue;
         }
       }
-    } catch {}
+    } catch { }
     symbolsToQuery.push(s);
   }
 
@@ -309,7 +313,7 @@ async function fetchTwelveDataQuotes(symbols, market) {
               const jX = await fetchQuoteWithParams({ mic_code: "XMEX" });
               if (!!jX && !jX.code) j = jX;
               if (DEBUG_LOG) LOG("[TD] FORCE_XMEX attempt", { orig, tdSymbol, ok: !!j });
-            } catch {}
+            } catch { }
           }
 
           if (!j) {
@@ -353,7 +357,7 @@ async function fetchTwelveDataQuotes(symbols, market) {
               try {
                 const j3 = await fetchQuoteWithParams({ mic_code: "XMEX" });
                 if (validPrice(j3)) j = j3;
-              } catch {}
+              } catch { }
             }
           }
 
@@ -362,14 +366,14 @@ async function fetchTwelveDataQuotes(symbols, market) {
             try {
               const j3 = await fetchQuoteWithParams({ mic_code: "XMEX" });
               if (!!j3 && !j3.code) j = j3;
-            } catch {}
+            } catch { }
           }
           if ((!j || j.code || j.status === "error" || !validPrice(j)) && isMX) {
             if (DEBUG_LOG) LOG("[TD] XMEX invalid, try no exchange", { orig, tdSymbol });
             try {
               const j2 = await fetchQuoteWithParams();
               if (!!j2 && !j2.code) j = j2;
-            } catch {}
+            } catch { }
           }
           if ((!j || j.code || j.status === "error" || !validPrice(j)) && isMX && tdSymbol === "AMXL") {
             if (DEBUG_LOG) LOG("[TD] AMXL fallback -> AMXB", { orig });
@@ -413,7 +417,7 @@ async function fetchTwelveDataQuotes(symbols, market) {
             exchange: finalSource,
           });
           if (isIndexSymbol(orig)) return null;
-          try { localStorage.setItem(`td:${market}:${orig}`, JSON.stringify({ ts: now, data: norm })); } catch {}
+          try { localStorage.setItem(`td:${market}:${orig}`, JSON.stringify({ ts: now, data: norm })); } catch { }
           return norm;
         } catch (err) {
           if (DEBUG_LOG) LOG("[TD] quote exception", { market, symbol: orig, err: String(err) });
@@ -463,7 +467,7 @@ async function fetchTwelveDataPrices(symbols, market) {
         const res = await fetch(url);
         j = await res.json();
       } catch (e) {
-      if (DEBUG_LOG) LOG("[TD] BMV price fetch error", { orig, tdSymbol, err: String(e) });
+        if (DEBUG_LOG) LOG("[TD] BMV price fetch error", { orig, tdSymbol, err: String(e) });
         j = null;
       }
       const validPrice = (obj) => {
@@ -479,7 +483,7 @@ async function fetchTwelveDataPrices(symbols, market) {
           const res3 = await fetch(url3);
           const j3 = await res3.json();
           j = j3;
-        } catch {}
+        } catch { }
       }
       if ((!j || j.code || j.status === "error" || !validPrice(j)) && isMX) {
         // Final retry without exchange
@@ -489,7 +493,7 @@ async function fetchTwelveDataPrices(symbols, market) {
           const res2 = await fetch(url2);
           const j2 = await res2.json();
           j = j2;
-        } catch {}
+        } catch { }
       }
       // Symbol-level fallback: AMXL -> AMXB
       if ((!j || j.code || j.status === "error" || !validPrice(j)) && isMX && tdSymbol === "AMXL") {
@@ -504,13 +508,13 @@ async function fetchTwelveDataPrices(symbols, market) {
           if (!validPrice(jj)) jj = await tryFetch({ apikey: key, symbol: "AMXB", mic_code: "XMEX" });
           if (!validPrice(jj)) jj = await tryFetch({ apikey: key, symbol: "AMXB" });
           j = jj;
-        } catch {}
+        } catch { }
       }
       const price = toNumber(j?.price ?? j?.close ?? j?.previous_close);
       if (Number.isFinite(price) && price > 0) {
         out.push(normalizeResult({ symbol: orig, name: orig, price, changePct: 0, volume: 0 }));
       }
-    } catch {}
+    } catch { }
   }
   return out;
 }
@@ -546,7 +550,7 @@ async function fetchTwelveDataCryptoQuotes(symbols) {
           continue;
         }
       }
-    } catch {}
+    } catch { }
     toQuery.push(s);
   }
 
@@ -577,18 +581,18 @@ async function fetchTwelveDataCryptoQuotes(symbols) {
             try {
               const pair = `${String(base).toUpperCase()}USDT`;
               const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`;
-              const bj = await fetch(url).then(r=>r.json()).catch(()=>null);
+              const bj = await fetch(url).then(r => r.json()).catch(() => null);
               const volQuote = toNumber(bj?.quoteVolume);
               if (Number.isFinite(volQuote) && volQuote > 0) volume = volQuote;
-            } catch {}
+            } catch { }
           }
           const row = { symbol: base, name: j.name || base, priceUSD, changePct, volume };
           groupResults.push(row);
           fetched.push(row);
-          try { localStorage.setItem(`td:crypto:${base}`, JSON.stringify({ ts: now, data: row })); } catch {}
+          try { localStorage.setItem(`td:crypto:${base}`, JSON.stringify({ ts: now, data: row })); } catch { }
         }
       } catch (_) {
-        try { localStorage.setItem("td:crypto:fail", JSON.stringify({ ts: Date.now(), count: ((JSON.parse(localStorage.getItem("td:crypto:fail")||"null")?.count||0)+1) })) } catch {}
+        try { localStorage.setItem("td:crypto:fail", JSON.stringify({ ts: Date.now(), count: ((JSON.parse(localStorage.getItem("td:crypto:fail") || "null")?.count || 0) + 1) })) } catch { }
         groupResults = [];
       }
       // Fallback for missing bases in this group via single-quote endpoint
@@ -607,17 +611,17 @@ async function fetchTwelveDataCryptoQuotes(symbols) {
               try {
                 const pair = `${String(base).toUpperCase()}USDT`;
                 const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`;
-                const bj = await fetch(url).then(r=>r.json()).catch(()=>null);
+                const bj = await fetch(url).then(r => r.json()).catch(() => null);
                 const volQuote = toNumber(bj?.quoteVolume);
                 if (Number.isFinite(volQuote) && volQuote > 0) volume = volQuote;
-              } catch {}
+              } catch { }
             }
             const row = { symbol: base, name: j.name || base, priceUSD, changePct, volume };
             fetched.push(row);
-            try { localStorage.setItem(`td:crypto:${base}`, JSON.stringify({ ts: now, data: row })); } catch {}
+            try { localStorage.setItem(`td:crypto:${base}`, JSON.stringify({ ts: now, data: row })); } catch { }
           }
         } catch {
-          try { localStorage.setItem("td:crypto:fail", JSON.stringify({ ts: Date.now(), count: ((JSON.parse(localStorage.getItem("td:crypto:fail")||"null")?.count||0)+1) })) } catch {}
+          try { localStorage.setItem("td:crypto:fail", JSON.stringify({ ts: Date.now(), count: ((JSON.parse(localStorage.getItem("td:crypto:fail") || "null")?.count || 0) + 1) })) } catch { }
         }
       }
       if (TD_GROUP_DELAY_MS > 0) await new Promise(r => setTimeout(r, TD_GROUP_DELAY_MS));
@@ -641,14 +645,14 @@ async function fetchTwelveDataCryptoSpark(base, { interval = "5min", points = 60
       // 加密货币统一使用 TD_CACHE_TTL_MS；不区分市场
       if (Date.now() - (obj.ts || 0) < TD_CACHE_TTL_MS && Array.isArray(obj.data)) return obj.data;
     }
-  } catch {}
+  } catch { }
   const params = new URLSearchParams({ apikey: key, symbol: `${base}/USD`, interval, outputsize: String(points) });
   const url = `${TD_BASE}/time_series?${params.toString()}`;
   const res = await fetch(url);
   const json = await res.json();
   const values = Array.isArray(json?.values) ? json.values : [];
   const closes = values.map(v => toNumber(v?.close)).filter(n => Number.isFinite(n));
-  try { localStorage.setItem(k, JSON.stringify({ ts: Date.now(), data: closes })); } catch {}
+  try { localStorage.setItem(k, JSON.stringify({ ts: Date.now(), data: closes })); } catch { }
   return closes;
 }
 
@@ -711,7 +715,7 @@ async function fetchAlphaVantageQuotes(symbols, market) {
           const obj = JSON.parse(raw);
           if (now - (obj.ts || 0) < TD_CACHE_TTL_MS && obj.data) { out.push(obj.data); continue; }
         }
-      } catch {}
+      } catch { }
       const avSymbol = toAvSym(orig);
       const params = new URLSearchParams({ function: "GLOBAL_QUOTE", symbol: avSymbol, apikey: key });
       const url = `${AV_BASE}?${params.toString()}`;
@@ -725,10 +729,10 @@ async function fetchAlphaVantageQuotes(symbols, market) {
       if (Number.isFinite(price) && price > 0) {
         const row = normalizeResult({ symbol: orig, name: orig, price, changePct, volume: vol, provider: "alphavantage" });
         out.push(row);
-        try { localStorage.setItem(cacheKey, JSON.stringify({ ts: now, data: row })); } catch {}
+        try { localStorage.setItem(cacheKey, JSON.stringify({ ts: now, data: row })); } catch { }
       }
       if (TD_GROUP_DELAY_MS > 0) await new Promise(r => setTimeout(r, TD_GROUP_DELAY_MS));
-    } catch {}
+    } catch { }
   }
   return out;
 }
@@ -748,27 +752,27 @@ export async function getQuotes({ market, symbols }) {
     if (indexSyms.length) {
       const idx = await fetchCustomIndexQuotes(indexSyms);
       if (idx.length) {
-        try { localStorage.setItem("provider:last:index", "custom"); } catch {}
+        try { localStorage.setItem("provider:last:index", "custom"); } catch { }
         results.push(...idx);
       } else if (has("VITE_FINNHUB_TOKEN")) {
         const fh = await fetchFinnhubQuotes(indexSyms);
         if (fh.length) {
-          try { localStorage.setItem("provider:last:index", "finnhub"); } catch {}
+          try { localStorage.setItem("provider:last:index", "finnhub"); } catch { }
           results.push(...fh);
         }
       } else {
         // Try FMP for index quotes (supports major indices with demo key)
         const fmpIdx = await fetchFmpQuotes(indexSyms, "us");
         if (fmpIdx.length) {
-          try { localStorage.setItem("provider:last:index", "fmp"); } catch {}
+          try { localStorage.setItem("provider:last:index", "fmp"); } catch { }
           results.push(...fmpIdx);
         } else {
           // Skip Yahoo by default; let page-level static fallback handle indices when providers unavailable.
-          try { localStorage.setItem("provider:last:index", "none-yf-disabled"); } catch {}
+          try { localStorage.setItem("provider:last:index", "none-yf-disabled"); } catch { }
         }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // 2) Non-index: TD → FMP (US) → Finnhub → TD price-only
   try {
@@ -776,7 +780,7 @@ export async function getQuotes({ market, symbols }) {
       let td = [];
       try { td = await fetchTwelveDataQuotes(nonIndexSyms, market); } catch { td = []; }
       if (td.length) {
-        try { localStorage.setItem("provider:last", "twelve"); } catch {}
+        try { localStorage.setItem("provider:last", "twelve"); } catch { }
         results.push(...td);
         const missing = nonIndexSyms.filter(s => !td.find(r => r.symbol === s));
         if (missing.length) {
@@ -787,26 +791,26 @@ export async function getQuotes({ market, symbols }) {
               const fhMissing = await fetchFinnhubQuotes(missing);
               if (fhMissing.length) { results.push(...fhMissing); }
             }
-          } catch {}
+          } catch { }
         }
       } else {
         // TD failed entirely; try FMP/Finnhub batch for non-index
         try {
           const fmp = await fetchFmpQuotes(nonIndexSyms, market);
           if (fmp.length) {
-            try { localStorage.setItem("provider:last", "fmp"); } catch {}
+            try { localStorage.setItem("provider:last", "fmp"); } catch { }
             results.push(...fmp);
           } else if (has("VITE_FINNHUB_TOKEN")) {
             const fh = await fetchFinnhubQuotes(nonIndexSyms);
             if (fh.length) {
-              try { localStorage.setItem("provider:last", "finnhub"); } catch {}
+              try { localStorage.setItem("provider:last", "finnhub"); } catch { }
               results.push(...fh);
             }
           }
-        } catch {}
+        } catch { }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // 3) Last-resort for any remaining non-index: TD price-only
   const missingAll = syms.filter(s => !results.find(r => r.symbol === s));
@@ -815,17 +819,17 @@ export async function getQuotes({ market, symbols }) {
     if (nonIdxMissing.length) {
       const tdPrices = await fetchTwelveDataPrices(nonIdxMissing, market);
       if (tdPrices.length) {
-        try { localStorage.setItem("provider:last", "twelve_price"); } catch {}
+        try { localStorage.setItem("provider:last", "twelve_price"); } catch { }
         results.push(...tdPrices);
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Return in input order
   const bySymbol = new Map(results.map(r => [r.symbol, r]));
   const ordered = syms.map(s => bySymbol.get(s)).filter(Boolean);
   if (!ordered.length) {
-    try { localStorage.setItem("provider:last", "none"); } catch {}
+    try { localStorage.setItem("provider:last", "none"); } catch { }
   }
   // Persist per-symbol cache for UI fallback when providers hiccup
   try {
@@ -835,7 +839,7 @@ export async function getQuotes({ market, symbols }) {
       if (!r || !r.symbol) return;
       localStorage.setItem(`td:${mk}:${r.symbol}`, JSON.stringify({ ts: now, data: r }));
     });
-  } catch {}
+  } catch { }
   return ordered;
 }
 
@@ -855,11 +859,11 @@ export async function getUsdMxnRate() {
         return { rate: obj.rate, source: obj.source || "cache" };
       }
     }
-  } catch {}
+  } catch { }
 
   const key = getTDKey();
   const save = (rate, source) => {
-    try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), rate, source })); } catch {}
+    try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), rate, source })); } catch { }
     return { rate, source };
   };
 
@@ -872,15 +876,15 @@ export async function getUsdMxnRate() {
       const j = await res.json();
       const price = Number(j?.price ?? j?.close ?? j?.previous_close);
       if (Number.isFinite(price) && price > 0) return save(price, "twelvedata");
-    } catch {}
+    } catch { }
   }
 
   // Fallback: open.er-api
   try {
-    const j = await fetch("https://open.er-api.com/v6/latest/USD").then(r=>r.json());
+    const j = await fetch("https://open.er-api.com/v6/latest/USD").then(r => r.json());
     const rate = Number(j?.rates?.MXN || NaN);
     if (Number.isFinite(rate) && rate > 0) return save(rate, "er-api");
-  } catch {}
+  } catch { }
 
   // Secondary fallback: exchangerate.host (free, no key, real-time-ish)
   try {
@@ -888,7 +892,7 @@ export async function getUsdMxnRate() {
     const j = await res.json();
     const rate = Number(j?.rates?.MXN || NaN);
     if (Number.isFinite(rate) && rate > 0) return save(rate, "exchangerate.host");
-  } catch {}
+  } catch { }
 
   // Final fallback constant
   return save(18.0, "constant");
@@ -907,7 +911,7 @@ export async function getCryptoQuotes({ symbols }) {
         try {
           const pair = `${String(base).toUpperCase()}USDT`;
           const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`;
-          const j = await fetch(url).then(r=>r.json()).catch(()=>null);
+          const j = await fetch(url).then(r => r.json()).catch(() => null);
           if (!j || j.code) return;
           const priceUSD = toNumber(j.lastPrice ?? j.weightedAvgPrice ?? j.prevClosePrice);
           const changePct = toNumber(j.priceChangePercent);
@@ -921,7 +925,7 @@ export async function getCryptoQuotes({ symbols }) {
               row.volume = volQuote;
             }
           }
-        } catch {}
+        } catch { }
       }));
       return Array.from(bySym.values());
     }
@@ -934,7 +938,7 @@ export async function getCryptoQuotes({ symbols }) {
     for (const base of syms) {
       const pair = `${String(base).toUpperCase()}USDT`;
       const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`;
-      const j = await fetch(url).then(r=>r.json()).catch(()=>null);
+      const j = await fetch(url).then(r => r.json()).catch(() => null);
       if (!j || j.code) continue;
       const priceUSD = toNumber(j.lastPrice ?? j.weightedAvgPrice ?? j.prevClosePrice);
       const changePct = toNumber(j.priceChangePercent);
@@ -1007,7 +1011,7 @@ async function fetchTwelveDataStockSpark(symbol, market, { interval = "1min", po
       const res3 = await fetch(url3);
       const j3 = await res3.json();
       json = j3;
-    } catch {}
+    } catch { }
   }
   if ((!json || json.code || json.status === "error" || !hasValues(json)) && isMX) {
     // Final retry without exchange
@@ -1017,7 +1021,7 @@ async function fetchTwelveDataStockSpark(symbol, market, { interval = "1min", po
       const res2 = await fetch(url2);
       const j2 = await res2.json();
       json = j2;
-    } catch {}
+    } catch { }
   }
   // Symbol-level fallback: AMXL -> AMXB for sparkline
   if ((!json || json.code || json.status === "error" || !hasValues(json)) && isMX && tdSymbol === "AMXL") {
@@ -1032,7 +1036,7 @@ async function fetchTwelveDataStockSpark(symbol, market, { interval = "1min", po
       if (!hasValues(jj)) jj = await tryFetch({ apikey: key, symbol: "AMXB", interval, outputsize: String(points), mic_code: "XMEX" });
       if (!hasValues(jj)) jj = await tryFetch({ apikey: key, symbol: "AMXB", interval, outputsize: String(points) });
       json = jj;
-    } catch {}
+    } catch { }
   }
   const values = Array.isArray(json?.values) ? json.values : [];
   const closes = values.map(v => toNumber(v?.close)).filter(n => Number.isFinite(n));

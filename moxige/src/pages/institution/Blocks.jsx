@@ -26,7 +26,7 @@ export default function InstitutionBlocks() {
       const qs = new URLSearchParams(typeof location !== 'undefined' ? (location.search || '') : '');
       const td = (qs.get('tdkey') || qs.get('twelvedata') || '').trim();
       if (td && !localStorage.getItem('td:key')) localStorage.setItem('td:key', td);
-    } catch {}
+    } catch { }
   }, []);
 
   const labels = useMemo(() => ({
@@ -88,11 +88,11 @@ export default function InstitutionBlocks() {
             try {
               const pair = `${String(base).toUpperCase()}USDT`;
               const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`;
-              const j = await fetch(url).then(r=>r.json()).catch(()=>null);
+              const j = await fetch(url).then(r => r.json()).catch(() => null);
               const p = Number(j?.lastPrice ?? j?.weightedAvgPrice ?? j?.prevClosePrice ?? 0);
               const ch = Number(j?.priceChangePercent ?? 0);
               if (p > 0) next[`crypto:${String(base).toUpperCase()}`] = { price: p, changePct: ch };
-            } catch {}
+            } catch { }
           }
         }
       } catch {
@@ -105,16 +105,16 @@ export default function InstitutionBlocks() {
             const p = Number(r.price || 0);
             if (p > 0) next[`crypto:${base}`] = { price: p, changePct: Number(r.changePercent || 0) };
           }
-        } catch {}
+        } catch { }
         for (const base of cryptoSymbols) {
           try {
             const pair = `${String(base).toUpperCase()}USDT`;
             const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`;
-            const j = await fetch(url).then(r=>r.json()).catch(()=>null);
+            const j = await fetch(url).then(r => r.json()).catch(() => null);
             const p = Number(j?.lastPrice ?? j?.weightedAvgPrice ?? j?.prevClosePrice ?? 0);
             const ch = Number(j?.priceChangePercent ?? 0);
             if (p > 0) next[`crypto:${String(base).toUpperCase()}`] = { price: p, changePct: ch };
-          } catch {}
+          } catch { }
         }
       }
       try {
@@ -135,12 +135,12 @@ export default function InstitutionBlocks() {
                   const raw = JSON.parse(localStorage.getItem(`td:us:${s}`) || 'null');
                   const p = Number(raw?.data?.price || 0);
                   if (p > 0) next[`us:${s}`] = { price: p, changePct: Number(raw?.data?.changePct || 0) };
-                } catch {}
+                } catch { }
               }
-            } catch {}
+            } catch { }
           }
         }
-      } catch {}
+      } catch { }
       if (!stopped) setQuotes(prev => ({ ...prev, ...next }));
     }
     refreshQuotes();
@@ -164,11 +164,11 @@ export default function InstitutionBlocks() {
       const qs = new URLSearchParams(typeof location !== 'undefined' ? (location.search || '') : '');
       const v = (qs.get('submitAny') || qs.get('force') || qs.get('allow') || '').trim();
       if (v) override = /^(1|true|yes|y)$/i.test(v);
-    } catch {}
+    } catch { }
     try {
       const ls = (localStorage.getItem('inst:block:submit_anytime') || '').trim();
       if (ls) override = /^(1|true|yes|y)$/i.test(ls);
-    } catch {}
+    } catch { }
     const isDev = !!(import.meta.env && import.meta.env.DEV);
     return open || override || isDev;
   }
@@ -180,38 +180,39 @@ export default function InstitutionBlocks() {
     const q = Number(qtyMap[id] || 0);
     const minQ = Number(it.min_qty || it.minQty || 1);
     const key = String(keyMap[id] || '').trim();
-    if (!q || !Number.isFinite(q) || q < minQ) { alert(lang==='zh' ? '数量不合法或低于最小购买' : 'Invalid qty or below minimum'); return; }
-    if (!key || key.length < 6) { alert(lang==='zh' ? '请输入有效认购密钥' : 'Enter valid subscription key'); return; }
+    if (!q || !Number.isFinite(q) || q < minQ) { alert(lang === 'zh' ? '数量不合法或低于最小购买' : 'Invalid qty or below minimum'); return; }
+    if (!key || key.length < 6) { alert(lang === 'zh' ? '请输入有效认购密钥' : 'Enter valid subscription key'); return; }
     const can = canSubmitNow(it);
-    if (!can) { alert(lang==='zh' ? '不在申购时间窗内' : 'Out of subscription window'); return; }
+    if (!can) { alert(lang === 'zh' ? '不在申购时间窗内' : 'Out of subscription window'); return; }
     const quoteKey = `${market}:${symbol}`;
-    const cp = Number(quotes[quoteKey]?.price || it.price || 0);
+    // Use the block price (discounted price) for the subscription, not the market price
+    const cp = Number(it.price || 0);
     try {
       setSubmittingId(id);
       await api.post('/trade/block/subscribe', { blockId: id, qty: q, currentPrice: cp, key });
-      showToast(lang==='zh' ? '已提交申购，待后台审批' : (lang==='es' ? 'Enviado, en espera de aprobación' : 'Submitted, pending approval'), 'ok');
+      showToast(lang === 'zh' ? '已提交申购，待后台审批' : (lang === 'es' ? 'Enviado, en espera de aprobación' : 'Submitted, pending approval'), 'ok');
       setQtyMap(prev => ({ ...prev, [id]: '' }));
       setKeyMap(prev => ({ ...prev, [id]: '' }));
       // 保持在当前页，避免前端 /admin 404
     } catch (e) {
       const msg = (e && (e.message || (e.response && (e.response.data?.error || e.response.data?.message)))) || String(e);
-      alert((lang==='zh' ? '提交失败: ' : 'Submit failed: ') + msg);
+      alert((lang === 'zh' ? '提交失败: ' : 'Submit failed: ') + msg);
     } finally { setSubmittingId(null); }
   }
 
   return (
     <div className="screen top-align" style={{ paddingTop: 6 }}>
-      <button className="back-btn" onClick={()=>nav(-1)} aria-label="back" style={{ transform:'scale(0.9)', left: 8, top: 8 }}><span className="back-icon"></span></button>
+      <button className="back-btn" onClick={() => nav(-1)} aria-label="back" style={{ transform: 'scale(0.9)', left: 8, top: 8 }}><span className="back-icon"></span></button>
       {toast.show && (<div className={`top-toast ${toast.type}`}>{toast.text}</div>)}
       <div className="inst-container">
         <div>
           <h1 className="title" style={{ marginTop: 0 }}>{labels.pageTitle}</h1>
-          <div className="desc" style={{ marginTop: 6 }}>{lang==='zh' ? '从后台配置的大宗交易中选择并认购' : (lang==='es' ? 'Seleccione y suscríbase a operaciones de bloque' : 'Select and subscribe to block trades')}</div>
+          <div className="desc" style={{ marginTop: 6 }}>{lang === 'zh' ? '从后台配置的大宗交易中选择并认购' : (lang === 'es' ? 'Seleccione y suscríbase a operaciones de bloque' : 'Select and subscribe to block trades')}</div>
         </div>
 
         <div className="inst-card">
-          {loading && (<div className="desc">{lang==='zh' ? '加载中...' : (lang==='es' ? 'Cargando...' : 'Loading...')}</div>)}
-          {!loading && (() => items.filter(inWindow).length === 0)() && (<div className="desc">{lang==='zh' ? '暂无数据' : (lang==='es' ? 'Sin datos' : 'No data')}</div>)}
+          {loading && (<div className="desc">{lang === 'zh' ? '加载中...' : (lang === 'es' ? 'Cargando...' : 'Loading...')}</div>)}
+          {!loading && (() => items.filter(inWindow).length === 0)() && (<div className="desc">{lang === 'zh' ? '暂无数据' : (lang === 'es' ? 'Sin datos' : 'No data')}</div>)}
           {!loading && items.filter(inWindow).length > 0 && (
             <div style={{ display: 'grid', gap: 12 }}>
               {items.filter(inWindow).map(it => {
@@ -235,18 +236,18 @@ export default function InstitutionBlocks() {
                   <div key={it.id} className="card" style={{ display: 'grid', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                       <div style={{ fontWeight: 700 }}>{labels.symbol}: {baseSymbol}</div>
-                      <div className="tag" style={{ background: market==='crypto' ? '#2a3b56' : '#2a5640', transform:'scale(0.92)', whiteSpace:'normal', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'60%' }}>{labels.type}: {market==='crypto' ? labels.typeCrypto : labels.typeUS}</div>
+                      <div className="tag" style={{ background: market === 'crypto' ? '#2a3b56' : '#2a5640', transform: 'scale(0.92)', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60%' }}>{labels.type}: {market === 'crypto' ? labels.typeCrypto : labels.typeUS}</div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      <div className="desc">{labels.currentPrice}: {(market==='crypto' ? formatUSDT(currentPrice, lang) : formatMoney(currentPrice, 'USD', lang))}</div>
-                      <div className="desc">{labels.blockPrice}: {market==='crypto' ? formatUSDT(blockPrice, lang) : formatMoney(blockPrice, 'USD', lang)}</div>
+                      <div className="desc">{labels.currentPrice}: {(market === 'crypto' ? formatUSDT(currentPrice, lang) : formatMoney(currentPrice, 'USD', lang))}</div>
+                      <div className="desc">{labels.blockPrice}: {market === 'crypto' ? formatUSDT(blockPrice, lang) : formatMoney(blockPrice, 'USD', lang)}</div>
                       <div className="desc">{labels.window}: {formatMinute(it.start_at || it.startAt)} ~ {formatMinute(it.end_at || it.endAt)}</div>
-                      <div className="desc">{lang==='zh'?'截至购买':'Deadline'}: {formatMinute(it.end_at || it.endAt)}</div>
+                      <div className="desc">{lang === 'zh' ? '截至购买' : 'Deadline'}: {formatMinute(it.end_at || it.endAt)}</div>
                       <div className="desc">{labels.lockedUntil}: {formatMinute(it.lock_until || it.lockUntil)}</div>
                       <div className="desc">{labels.minQty}: {minQty}</div>
-                      <div className="desc">{labels.consume}: {currency==='USDT' ? formatUSDT(total, lang) : formatMoney(total, 'USD', lang)}</div>
-                      <div className="desc" style={{ color: unitProfit>=0 ? '#5cff9b' : '#ff5c7a' }}>
-                        {(lang==='zh'?'预计收益':'Est. Profit')}: {(currency==='USDT' ? formatUSDT(totalProfit || unitProfit, lang) : formatMoney(totalProfit || unitProfit, 'USD', lang))} ({unitPct.toFixed(2)}%)
+                      <div className="desc">{labels.consume}: {currency === 'USDT' ? formatUSDT(total, lang) : formatMoney(total, 'USD', lang)}</div>
+                      <div className="desc" style={{ color: unitProfit >= 0 ? '#5cff9b' : '#ff5c7a' }}>
+                        {(lang === 'zh' ? '预计收益' : 'Est. Profit')}: {(currency === 'USDT' ? formatUSDT(totalProfit || unitProfit, lang) : formatMoney(totalProfit || unitProfit, 'USD', lang))} ({unitPct.toFixed(2)}%)
                       </div>
                     </div>
                     <div className="form admin-form-compact" style={{ marginTop: 4 }}>
@@ -255,7 +256,7 @@ export default function InstitutionBlocks() {
                         className="input"
                         type="password"
                         autoComplete="off"
-                        placeholder={lang==='zh' ? '请输入认购密钥' : 'Enter subscription key'}
+                        placeholder={lang === 'zh' ? '请输入认购密钥' : 'Enter subscription key'}
                         value={keyMap[it.id] || ''}
                         onChange={e => setKeyMap(p => ({ ...p, [it.id]: e.target.value }))}
                         style={{ WebkitTextSecurity: 'disc', maxWidth: 320 }}
