@@ -37,7 +37,7 @@ export default function IpoRwaPage() {
       const qs = new URLSearchParams(typeof location !== 'undefined' ? (location.search || '') : '');
       const td = (qs.get('tdkey') || '').trim();
       if (td && !localStorage.getItem('td:key')) localStorage.setItem('td:key', td);
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -60,6 +60,7 @@ export default function IpoRwaPage() {
         });
         setList(filtered);
         const codes = filtered
+          .filter(it => String(it.kind || '').toLowerCase() !== 'rwa')
           .filter(it => !(Number.isFinite(Number(it.listPrice))))
           .map(it => fixSymbol(it.code));
         const map = {};
@@ -67,7 +68,7 @@ export default function IpoRwaPage() {
           try {
             const quotes = await getQuotes({ market: 'us', symbols: codes });
             for (const q of quotes) { if (q && q.symbol) map[fixSymbol(q.symbol)] = Number(q.price || 0); }
-          } catch {}
+          } catch { }
           try {
             const missing = codes.filter(c => !(map[c] > 0));
             for (const s of missing) {
@@ -75,9 +76,9 @@ export default function IpoRwaPage() {
                 const closes = await getStockSpark(s, 'us', { interval: '1day', points: 1 });
                 const prevClose = Array.isArray(closes) && closes.length ? Number(closes[closes.length - 1] || 0) : 0;
                 if (Number.isFinite(prevClose) && prevClose > 0) map[s] = prevClose;
-              } catch {}
+              } catch { }
             }
-          } catch {}
+          } catch { }
         }
         setPriceMap(prev => {
           const next = { ...prev };
@@ -100,14 +101,14 @@ export default function IpoRwaPage() {
     const tick = async () => {
       try {
         const codes = (Array.isArray(list) ? list : [])
-          .filter(it => String(it.kind||'').toLowerCase()==='ipo')
+          .filter(it => String(it.kind || '').toLowerCase() === 'ipo')
           .map(it => fixSymbol(it.code));
         if (!codes.length) return;
         const map = {};
         try {
           const qs = await getQuotes({ market: 'us', symbols: codes });
           for (const q of qs) { if (q && q.symbol) map[fixSymbol(q.symbol)] = Number(q.price || 0); }
-        } catch {}
+        } catch { }
         try {
           const missing = codes.filter(c => !(map[c] > 0));
           for (const s of missing) {
@@ -115,9 +116,9 @@ export default function IpoRwaPage() {
               const closes = await getStockSpark(s, 'us', { interval: '1day', points: 1 });
               const prevClose = Array.isArray(closes) && closes.length ? Number(closes[closes.length - 1] || 0) : 0;
               if (Number.isFinite(prevClose) && prevClose > 0) map[s] = prevClose;
-            } catch {}
+            } catch { }
           }
-        } catch {}
+        } catch { }
         if (!stopped) {
           setPriceMap(prev => {
             const next = { ...prev };
@@ -128,7 +129,7 @@ export default function IpoRwaPage() {
             return next;
           });
         }
-      } catch {}
+      } catch { }
     };
     tick();
     const iv = setInterval(tick, 12000);
@@ -143,12 +144,12 @@ export default function IpoRwaPage() {
       try {
         const items = Array.isArray(list) ? list : [];
         const pairs = items
-          .filter(it => String(it.kind||'').toLowerCase()==='rwa')
+          .filter(it => String(it.kind || '').toLowerCase() === 'rwa')
           .map(it => {
             const pair = String(it.pairAddress || it.pair || it.pair_address || '').trim();
             const token = String(it.tokenAddress || it.token || it.token_address || '').trim();
             const chain = String(it.chain || 'base');
-            return { code: String(it.code||'').toUpperCase(), pair, token, chain };
+            return { code: String(it.code || '').toUpperCase(), pair, token, chain };
           })
           .filter(x => x.pair || x.token);
         const next = {};
@@ -158,7 +159,7 @@ export default function IpoRwaPage() {
             const r = await api.get(`/trade/rwa/price?${qs}`, { timeoutMs: 9000 });
             const p = Number(r?.price || 0);
             if (Number.isFinite(p) && p > 0) next[code] = p;
-          } catch {}
+          } catch { }
         }
         if (!stopped && Object.keys(next).length) {
           setPriceMap(prev => {
@@ -170,7 +171,7 @@ export default function IpoRwaPage() {
             return merged;
           });
         }
-      } catch {}
+      } catch { }
     };
     run();
     return () => { stopped = true; };
@@ -179,14 +180,14 @@ export default function IpoRwaPage() {
   const submitSubscribe = async (code, price, it) => {
     try {
       const qty = Number(qtyMap[code] || 0);
-      if (!Number.isFinite(qty) || qty <= 0) { alert(lang==='es'?'Ingrese cantidad':'Enter quantity'); return; }
+      if (!Number.isFinite(qty) || qty <= 0) { alert(lang === 'es' ? 'Ingrese cantidad' : 'Enter quantity'); return; }
       const now = Date.now();
       const sAt = it?.subscribeAt ? new Date(it.subscribeAt).getTime() : 0;
       const eAt = it?.subscribeEndAt ? new Date(it.subscribeEndAt).getTime() : 0;
-      if (sAt && eAt && (now < sAt || now > eAt)) { alert(lang==='es'?'Fuera de ventana de suscripción':'Out of subscription window'); return; }
+      if (sAt && eAt && (now < sAt || now > eAt)) { alert(lang === 'es' ? 'Fuera de ventana de suscripción' : 'Out of subscription window'); return; }
       setSubmittingId(code);
       await api.post('/me/ipo/subscribe', { code, qty });
-      setToast({ show: true, type: 'ok', text: lang==='es'?'Solicitud enviada':'Submitted' });
+      setToast({ show: true, type: 'ok', text: lang === 'es' ? 'Solicitud enviada' : 'Submitted' });
       setTimeout(() => setToast({ show: false, type: 'ok', text: '' }), 1000);
       setQtyMap(p => ({ ...p, [code]: '' }));
     } catch (e) {
@@ -201,18 +202,18 @@ export default function IpoRwaPage() {
   const submitModal = async () => {
     if (!modalItem) return;
     const qv = Number(modalQty || 0);
-    if (!Number.isFinite(qv) || qv <= 0) { setToast({ show: true, type: 'error', text: lang==='es'?'Ingrese cantidad':'Enter quantity' }); setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000); return; }
+    if (!Number.isFinite(qv) || qv <= 0) { setToast({ show: true, type: 'error', text: lang === 'es' ? 'Ingrese cantidad' : 'Enter quantity' }); setTimeout(() => setToast({ show: false, type: 'error', text: '' }), 1000); return; }
     try {
       setSubmittingId(modalItem.code);
       await api.post('/me/ipo/subscribe', { code: modalItem.code, qty: qv, currentPrice: Number(modalItem.current || 0) });
-      setToast({ show: true, type: 'ok', text: lang==='es'?'Solicitud enviada':'Submitted' });
+      setToast({ show: true, type: 'ok', text: lang === 'es' ? 'Solicitud enviada' : 'Submitted' });
       setTimeout(() => setToast({ show: false, type: 'ok', text: '' }), 1000);
       closeModal();
-      try { const od = await api.get('/me/ipo/orders'); const arr = Array.isArray(od?.items) ? od.items : []; setOrders(arr); } catch {}
+      try { const od = await api.get('/me/ipo/orders'); const arr = Array.isArray(od?.items) ? od.items : []; setOrders(arr); } catch { }
     } catch (e) {
       const raw = String(e?.message || e);
       const ended = /ended|window\s*closed/i.test(raw);
-      const txt = ended ? (lang==='es'?'Suscripción finalizada':'Subscribe ended') : raw;
+      const txt = ended ? (lang === 'es' ? 'Suscripción finalizada' : 'Subscribe ended') : raw;
       setToast({ show: true, type: 'error', text: txt });
       setTimeout(() => setToast({ show: false, type: 'error', text: '' }), 1000);
     } finally { setSubmittingId(null); }
@@ -240,7 +241,7 @@ export default function IpoRwaPage() {
   // Fetch details (name, listAt, canSellOnListingDay) for order codes
   useEffect(() => {
     let stopped = false;
-    const codes = Array.from(new Set((orders||[]).map(o => fixSymbol(o.code))));
+    const codes = Array.from(new Set((orders || []).map(o => fixSymbol(o.code))));
     const fetchDetails = async () => {
       try {
         const map = {};
@@ -253,7 +254,7 @@ export default function IpoRwaPage() {
               listAt: d?.listAt || d?.list_at || null,
               canSellOnListingDay: Boolean(d?.canSellOnListingDay || d?.can_sell_on_listing_day)
             };
-          } catch {}
+          } catch { }
         }
         // 对缺失的条目，用公开列表进行兜底
         try {
@@ -269,9 +270,9 @@ export default function IpoRwaPage() {
               canSellOnListingDay: typeof existing.canSellOnListingDay === 'boolean' ? existing.canSellOnListingDay : Boolean(it.canSellOnListingDay || it.can_sell_on_listing_day)
             };
           }
-        } catch {}
+        } catch { }
         if (!stopped) setOrderDetails(map);
-      } catch {}
+      } catch { }
     };
     fetchDetails();
     return () => { stopped = true; };
@@ -280,14 +281,14 @@ export default function IpoRwaPage() {
   // Fetch current prices for order codes via TwelveData; fallback to previous close
   useEffect(() => {
     let stopped = false;
-    const codes = Array.from(new Set((orders||[]).map(o => String(o.code||'').toUpperCase())));
+    const codes = Array.from(new Set((orders || []).map(o => String(o.code || '').toUpperCase())));
     const fetchPrices = async () => {
       const map = {};
       if (codes.length) {
         try {
           const qs = await getQuotes({ market: 'us', symbols: codes });
           for (const q of qs) { if (q && q.symbol) map[fixSymbol(q.symbol)] = Number(q.price || 0); }
-        } catch {}
+        } catch { }
         try {
           const missing = codes.filter(c => !(map[c] > 0));
           for (const s of missing) {
@@ -295,9 +296,9 @@ export default function IpoRwaPage() {
               const closes = await getStockSpark(s, 'us', { interval: '1day', points: 1 });
               const prevClose = Array.isArray(closes) && closes.length ? Number(closes[closes.length - 1] || 0) : 0;
               if (Number.isFinite(prevClose) && prevClose > 0) map[s] = prevClose;
-            } catch {}
+            } catch { }
           }
-        } catch {}
+        } catch { }
       }
       if (!stopped) setOrderPrices(prev => {
         const next = { ...prev };
@@ -321,8 +322,13 @@ export default function IpoRwaPage() {
         if (!tok) { setHasNegativeFunds(false); return; }
         const data = await api.get('/me/balances');
         const arr = Array.isArray(data?.balances) ? data.balances : [];
-        const anyNeg = arr.some(r => Number(r.amount || 0) < 0);
-        if (!stopped) setHasNegativeFunds(anyNeg);
+        // Use backend 'disabled' flag (MXN < 0) or fallback to finding MXN manually
+        let isNeg = !!data?.disabled;
+        if (data?.disabled === undefined) {
+          const mxn = arr.find(r => String(r.currency || '').toUpperCase() === 'MXN');
+          isNeg = mxn ? Number(mxn.amount || 0) < 0 : false;
+        }
+        if (!stopped) setHasNegativeFunds(isNeg);
       } catch { setHasNegativeFunds(false); }
     };
     checkBalances();
@@ -334,7 +340,7 @@ export default function IpoRwaPage() {
     try {
       const da = new Date(Number(a) || Date.parse(a));
       const db = new Date(Number(b) || Date.parse(b));
-      return da.getFullYear()===db.getFullYear() && da.getMonth()===db.getMonth() && da.getDate()===db.getDate();
+      return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
     } catch { return false; }
   }
   function formatYMD(v) {
@@ -342,10 +348,19 @@ export default function IpoRwaPage() {
       const d = new Date(Number(v) || Date.parse(v));
       if (isNaN(d.getTime())) return '-';
       const yyyy = d.getFullYear();
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
       return `${yyyy}/${mm}/${dd}`;
     } catch { return '-'; }
+  }
+  function formatRwaPrice(v, lang) {
+    const n = Number(v || 0);
+    if (!Number.isFinite(n)) return formatMoney(0, 'USD', lang);
+    if (Math.abs(n) < 1 && Math.abs(n) > 0) {
+      // For small numbers, show 4 decimal places
+      return `US$${n.toFixed(4)}`;
+    }
+    return formatMoney(n, 'USD', lang);
   }
   function canSellOrder(o) {
     const code = fixSymbol(o.code);
@@ -359,19 +374,19 @@ export default function IpoRwaPage() {
   }
   function orderCurrentPrice(o) {
     const code = fixSymbol(o.code);
-    if (String(o.status||'').toLowerCase()==='done' || String(o.status||'').toLowerCase()==='sold' || String(o.status||'').toLowerCase()==='filled' || String(o.status||'').toLowerCase()==='completed') {
+    if (String(o.status || '').toLowerCase() === 'done' || String(o.status || '').toLowerCase() === 'sold' || String(o.status || '').toLowerCase() === 'filled' || String(o.status || '').toLowerCase() === 'completed') {
       const fp = Number(o.finalPrice || o.sellPrice || o.filledPrice || o.closePrice || 0);
-      return Number.isFinite(fp) && fp>0 ? fp : 0;
+      return Number.isFinite(fp) && fp > 0 ? fp : 0;
     }
     const p = orderPrices[code];
-    return Number.isFinite(p) && p>0 ? p : 0;
+    return Number.isFinite(p) && p > 0 ? p : 0;
   }
   function orderProfit(o) {
     const cur = orderCurrentPrice(o);
     const price = Number(o.price || 0);
     const qty = Number(o.qty || 0);
-    if (!Number.isFinite(cur) || !Number.isFinite(price) || !Number.isFinite(qty) || qty<=0 || price<=0) return { amount: 0, pct: 0 };
-    const amount = Number(((cur - price) * qty).toFixed(2));
+    if (!Number.isFinite(cur) || !Number.isFinite(price) || !Number.isFinite(qty) || qty <= 0 || price <= 0) return { amount: 0, pct: 0 };
+    const amount = Number(((cur - price) * qty).toFixed(4));
     const pct = Number((((cur - price) / price) * 100).toFixed(2));
     return { amount, pct };
   }
@@ -382,10 +397,10 @@ export default function IpoRwaPage() {
     return '#9aa3ad';
   }
   async function onSell(o) {
-    if (hasNegativeFunds) { setToast({ show:true, type:'error', text: lang==='zh'?'当前账户异常，无法卖出':(lang==='es'?'Cuenta anormal, no se puede vender':'Account abnormal, cannot sell') }); setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000); return; }
+    if (hasNegativeFunds) { setToast({ show: true, type: 'error', text: lang === 'zh' ? '当前账户异常，无法卖出' : (lang === 'es' ? 'Cuenta anormal, no se puede vender' : 'Account abnormal, cannot sell') }); setTimeout(() => setToast({ show: false, type: 'error', text: '' }), 1000); return; }
     const { listed, listingDay, allowedToday } = canSellOrder(o);
-    if (!listed) { setToast({ show:true, type:'error', text: lang==='zh'?'未上市，暂不可卖出':(lang==='es'?'No listado, no se puede vender':'Not listed, cannot sell') }); setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000); return; }
-    if (listingDay && !allowedToday) { setToast({ show:true, type:'error', text: lang==='zh'?'上市当日不可卖出':(lang==='es'?'No vender en día de listado':'Cannot sell on listing day') }); setTimeout(()=>setToast({ show:false, type:'error', text:'' }), 1000); return; }
+    if (!listed) { setToast({ show: true, type: 'error', text: lang === 'zh' ? '未上市，暂不可卖出' : (lang === 'es' ? 'No listado, no se puede vender' : 'Not listed, cannot sell') }); setTimeout(() => setToast({ show: false, type: 'error', text: '' }), 1000); return; }
+    if (listingDay && !allowedToday) { setToast({ show: true, type: 'error', text: lang === 'zh' ? '上市当日不可卖出' : (lang === 'es' ? 'No vender en día de listado' : 'Cannot sell on listing day') }); setTimeout(() => setToast({ show: false, type: 'error', text: '' }), 1000); return; }
     // Snapshot latest price quickly (US)
     const symbol = fixSymbol(o.code);
     const tryTD = new Promise(async (resolve) => {
@@ -402,59 +417,59 @@ export default function IpoRwaPage() {
         resolve(Number.isFinite(prevClose) && prevClose > 0 ? prevClose : NaN);
       } catch { resolve(NaN); }
     });
-    const timeout = new Promise((resolve) => setTimeout(()=>resolve(NaN), 1400));
+    const timeout = new Promise((resolve) => setTimeout(() => resolve(NaN), 1400));
     let cp = await Promise.race([tryTD, tryPrevClose, timeout]);
     if (!Number.isFinite(cp) || cp <= 0) cp = orderCurrentPrice(o);
-    setToast({ show:true, type:'ok', text: lang==='zh'?'卖出成功':(lang==='es'?'Venta exitosa':'Sold') }); setTimeout(()=>setToast({ show:false, type:'ok', text:'' }), 1000);
+    setToast({ show: true, type: 'ok', text: lang === 'zh' ? '卖出成功' : (lang === 'es' ? 'Venta exitosa' : 'Sold') }); setTimeout(() => setToast({ show: false, type: 'ok', text: '' }), 1000);
     // Freeze locally
-    setOrders(prev => prev.map(x => x.id === o.id ? { ...x, status: 'done', finalPrice: Number(cp||0) } : x));
+    setOrders(prev => prev.map(x => x.id === o.id ? { ...x, status: 'done', finalPrice: Number(cp || 0) } : x));
   }
 
   return (
     <div className="screen top-align">
       {toast?.show && (
-        <div style={{ position:'fixed', top: 10, left: 0, right: 0, display:'grid', placeItems:'center', zIndex: 1000 }}>
-          <div style={{ padding:'8px 12px', borderRadius: 10, background: toast.type==='error' ? '#7a2a2a' : '#274a36', color:'#fff', boxShadow:'0 4px 14px rgba(0,0,0,.2)' }}>{toast.text}</div>
+        <div style={{ position: 'fixed', top: 10, left: 0, right: 0, display: 'grid', placeItems: 'center', zIndex: 1000 }}>
+          <div style={{ padding: '8px 12px', borderRadius: 10, background: toast.type === 'error' ? '#7a2a2a' : '#274a36', color: '#fff', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast.text}</div>
         </div>
       )}
-      <button className="back-btn" onClick={()=>navigate(-1)} aria-label="back"><span className="back-icon"></span></button>
+      <button className="back-btn" onClick={() => navigate(-1)} aria-label="back"><span className="back-icon"></span></button>
       <div className="card">
-        <div style={{ display:'flex', gap:8 }}>
-          <button className={`pill ${tab==='ipo'?'active':''}`} onClick={()=>setTab('ipo')}>IPO</button>
-          <button className={`pill ${tab==='rwa'?'active':''}`} onClick={()=>setTab('rwa')}>RWA</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className={`pill ${tab === 'ipo' ? 'active' : ''}`} onClick={() => setTab('ipo')}>IPO</button>
+          <button className={`pill ${tab === 'rwa' ? 'active' : ''}`} onClick={() => setTab('rwa')}>RWA</button>
         </div>
       </div>
       <div className="card">
-        <h1 className="title" style={{ marginTop: 0 }}>{tab==='ipo' ? 'IPO' : 'RWA'}</h1>
+        <h1 className="title" style={{ marginTop: 0 }}>{tab === 'ipo' ? 'IPO' : 'RWA'}</h1>
         {loading && <div className="desc">Loading...</div>}
         {!loading && list.length === 0 && <div className="desc">--</div>}
         {!loading && list.length > 0 && (
-          <div style={{ display:'grid', gap:12 }}>
+          <div style={{ display: 'grid', gap: 12 }}>
             {list.map(it => {
               const code = fixSymbol(it.code);
               const ncode = code;
-              const current = (() => { const p = priceMap[ncode]; const sp = Number(it.subscribePrice||0); return Number.isFinite(p) && p>0 ? p : (Number.isFinite(sp)?sp:0); })();
+              const current = (() => { const p = priceMap[ncode]; const sp = Number(it.subscribePrice || 0); return Number.isFinite(p) && p > 0 ? p : (Number.isFinite(sp) ? sp : 0); })();
               const displayCurrent = current;
               const subPrice = Number(it.subscribePrice || 0);
-              const unitProfit = Number((current - subPrice).toFixed(2));
+              const unitProfit = Number((current - subPrice).toFixed(6));
               const unitPct = Number(subPrice > 0 ? (((current - subPrice) / subPrice) * 100).toFixed(2) : 0);
               return (
-                <div key={it.id || code} className="card flat" style={{ border:'1px solid rgba(68,120,192,0.38)', borderRadius:12, padding:'12px 14px', boxShadow:'0 0 0 2px rgba(68,120,192,0.32), inset 0 0 0 2px rgba(68,120,192,0.26), inset 0 8px 28px rgba(68,120,192,0.14)' }}>
-                  <div style={{ border:'1px solid rgba(68,120,192,0.18)', borderRadius:10, padding:'10px 12px' }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 200px', gap:8, alignItems:'start' }}>
-                    <div style={{ display:'grid', gap:6 }}>
-                      <div style={{ fontWeight:700 }}>{it.name} · {code}</div>
-                      <div className="desc">{lang==='zh'?'当前价格':(lang==='es'?'Precio actual':'Current Price')}: {formatMoney(Number((displayCurrent>0?displayCurrent:Number(it.subscribePrice||0))||0),'USD',lang)}</div>
-                      <div className="desc">{lang==='zh'?'申购价格':(lang==='es'?'Precio institucional':'Institutional Price')}: {formatMoney(subPrice,'USD',lang)}</div>
-                      <div className="desc">{lang==='zh'?'上市日期':(lang==='es'?'Fecha de listado':'Listing Date')}: {it.listAt ? formatYMD(it.listAt) : '-'}</div>
-                      <div className="desc">{lang==='zh'?'申购截止':(lang==='es'?'Fin de suscripción':'Subscribe End')}: {it.subscribeEndAt ? formatMinute(it.subscribeEndAt) : '-'}</div>
+                <div key={it.id || code} className="card flat" style={{ border: '1px solid rgba(68,120,192,0.38)', borderRadius: 12, padding: '12px 14px', boxShadow: '0 0 0 2px rgba(68,120,192,0.32), inset 0 0 0 2px rgba(68,120,192,0.26), inset 0 8px 28px rgba(68,120,192,0.14)' }}>
+                  <div style={{ border: '1px solid rgba(68,120,192,0.18)', borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 8, alignItems: 'start' }}>
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        <div style={{ fontWeight: 700 }}>{it.name} · {code}</div>
+                        <div className="desc">{lang === 'zh' ? '当前价格' : (lang === 'es' ? 'Precio actual' : 'Current Price')}: {formatRwaPrice((displayCurrent > 0 ? displayCurrent : Number(it.subscribePrice || 0)) || 0, lang)}</div>
+                        <div className="desc">{lang === 'zh' ? '申购价格' : (lang === 'es' ? 'Precio institucional' : 'Institutional Price')}: {formatRwaPrice(subPrice, lang)}</div>
+                        <div className="desc">{lang === 'zh' ? '上市日期' : (lang === 'es' ? 'Fecha de listado' : 'Listing Date')}: {it.listAt ? formatYMD(it.listAt) : '-'}</div>
+                        <div className="desc">{lang === 'zh' ? '申购截止' : (lang === 'es' ? 'Fin de suscripción' : 'Subscribe End')}: {it.subscribeEndAt ? formatMinute(it.subscribeEndAt) : '-'}</div>
+                      </div>
+                      <div style={{ display: 'grid', justifyItems: 'end', gap: 6 }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: unitProfit > 0 ? '#5cff9b' : (unitProfit < 0 ? '#ff5c7a' : '#9aa3ad') }}>{unitPct}%</div>
+                        <div style={{ fontSize: 14, color: unitProfit > 0 ? '#5cff9b' : (unitProfit < 0 ? '#ff5c7a' : '#9aa3ad') }}>{unitProfit.toFixed(4)}</div>
+                        <button className="btn primary" onClick={() => openModal({ ...it, code, current, subPrice })}>{lang === 'es' ? 'Suscribir' : 'Subscribe'}</button>
+                      </div>
                     </div>
-                    <div style={{ display:'grid', justifyItems:'end', gap:6 }}>
-                      <div style={{ fontSize:18, fontWeight:700, color: unitProfit>0?'#5cff9b':(unitProfit<0?'#ff5c7a':'#9aa3ad') }}>{unitPct}%</div>
-                      <div style={{ fontSize:14, color: unitProfit>0?'#5cff9b':(unitProfit<0?'#ff5c7a':'#9aa3ad') }}>{unitProfit.toFixed(2)}</div>
-                      <button className="btn primary" onClick={()=>openModal({ ...it, code, current, subPrice })}>{lang==='es'?'Suscribir':'Subscribe'}</button>
-                    </div>
-                  </div>
                   </div>
                 </div>
               );
@@ -466,16 +481,16 @@ export default function IpoRwaPage() {
       {modalOpen && modalItem && (
         <div className="modal">
           <div className="modal-card">
-            <h2 className="title" style={{ marginTop:0 }}>{lang==='es'?'Solicitud de suscripción':'Subscribe Request'}</h2>
-            <div className="form" style={{ display:'grid', gap:8 }}>
-              <div className="desc">{lang==='es'?'Mercado':'Market'}: US Stocks</div>
-              <div className="desc">{lang==='es'?'Código':'Code'}: {modalItem.code}</div>
-              <div className="desc">{lang==='es'?'Precio actual':'Current Price'}: {modalItem.current ? formatMoney(modalItem.current,'USD',lang) : '-'}</div>
-              <div className="desc">{lang==='es'?'Precio institucional':'Institutional Price'}: {formatMoney(modalItem.subPrice,'USD',lang)}</div>
-              <input className="input" type="number" min="1" placeholder={lang==='es'?'Cantidad':'Quantity'} value={modalQty} onChange={e=>setModalQty(e.target.value)} />
-              <div className="sub-actions" style={{ justifyContent:'flex-end', gap:10 }}>
-                <button className="btn" onClick={closeModal}>{lang==='es'?'Cancelar':'Cancel'}</button>
-                <button className="btn primary" disabled={submittingId===modalItem.code} onClick={submitModal}>{lang==='es'?'Enviar':'Submit'}</button>
+            <h2 className="title" style={{ marginTop: 0 }}>{lang === 'es' ? 'Solicitud de suscripción' : 'Subscribe Request'}</h2>
+            <div className="form" style={{ display: 'grid', gap: 8 }}>
+              <div className="desc">{lang === 'es' ? 'Mercado' : 'Market'}: US Stocks</div>
+              <div className="desc">{lang === 'es' ? 'Código' : 'Code'}: {modalItem.code}</div>
+              <div className="desc">{lang === 'es' ? 'Precio actual' : 'Current Price'}: {modalItem.current ? formatRwaPrice(modalItem.current, lang) : '-'}</div>
+              <div className="desc">{lang === 'es' ? 'Precio institucional' : 'Institutional Price'}: {formatRwaPrice(modalItem.subPrice, lang)}</div>
+              <input className="input" type="number" min="1" placeholder={lang === 'es' ? 'Cantidad' : 'Quantity'} value={modalQty} onChange={e => setModalQty(e.target.value)} />
+              <div className="sub-actions" style={{ justifyContent: 'flex-end', gap: 10 }}>
+                <button className="btn" onClick={closeModal}>{lang === 'es' ? 'Cancelar' : 'Cancel'}</button>
+                <button className="btn primary" disabled={submittingId === modalItem.code} onClick={submitModal}>{lang === 'es' ? 'Enviar' : 'Submit'}</button>
               </div>
             </div>
           </div>
@@ -483,42 +498,42 @@ export default function IpoRwaPage() {
       )}
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h2 className="title" style={{ marginTop: 0 }}>{lang==='es'?'Órdenes IPO':'IPO Orders'}</h2>
-        {ordersUnsupported && (<div className="desc" style={{ marginTop: 6 }}>{lang==='es'?'Órdenes no disponibles':'Orders API unavailable'}</div>)}
-        <div style={{ display:'grid', gap:12, marginTop:10 }}>
-          {(orders||[]).map(o => {
-            const code = String(o.code||'').toUpperCase();
+        <h2 className="title" style={{ marginTop: 0 }}>{lang === 'es' ? 'Órdenes IPO' : 'IPO Orders'}</h2>
+        {ordersUnsupported && (<div className="desc" style={{ marginTop: 6 }}>{lang === 'es' ? 'Órdenes no disponibles' : 'Orders API unavailable'}</div>)}
+        <div style={{ display: 'grid', gap: 12, marginTop: 10 }}>
+          {(orders || []).map(o => {
+            const code = String(o.code || '').toUpperCase();
             const det = orderDetails[code] || {};
             const cur = orderCurrentPrice(o);
-            const price = Number(o.price||0);
-            const qty = Number(o.qty||0);
+            const price = Number(o.price || 0);
+            const qty = Number(o.qty || 0);
             const { amount, pct } = orderProfit(o);
             const color = profitColorBy(o);
             return (
-              <div key={o.id} className="card flat" style={{ border:'1px solid rgba(68,120,192,0.38)', borderRadius:12, padding:'12px 14px', boxShadow:'0 0 0 2px rgba(68,120,192,0.32), inset 0 0 0 2px rgba(68,120,192,0.26)', overflow:'hidden' }}>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 200px', gap:8, alignItems:'start' }}>
-                  <div style={{ display:'grid', gap:6 }}>
-                    <div style={{ fontWeight:700 }}>{'US Stocks'} · {det.name || code}</div>
-                    <div className="desc">{lang==='es'?'Fecha de listado':'Listing Date'}: {det.listAt ? formatYMD(det.listAt) : '-'}</div>
-                    {!(String(o.status||'').toLowerCase()==='done' || String(o.status||'').toLowerCase()==='sold' || String(o.status||'').toLowerCase()==='filled' || String(o.status||'').toLowerCase()==='completed') && (
-                      <div className="desc">{lang==='es'?'Precio actual':'Current Price'}: {formatMoney(Number(cur||0),'USD',lang)}</div>
+              <div key={o.id} className="card flat" style={{ border: '1px solid rgba(68,120,192,0.38)', borderRadius: 12, padding: '12px 14px', boxShadow: '0 0 0 2px rgba(68,120,192,0.32), inset 0 0 0 2px rgba(68,120,192,0.26)', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 8, alignItems: 'start' }}>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <div style={{ fontWeight: 700 }}>{'US Stocks'} · {det.name || code}</div>
+                    <div className="desc">{lang === 'es' ? 'Fecha de listado' : 'Listing Date'}: {det.listAt ? formatYMD(det.listAt) : '-'}</div>
+                    {!(String(o.status || '').toLowerCase() === 'done' || String(o.status || '').toLowerCase() === 'sold' || String(o.status || '').toLowerCase() === 'filled' || String(o.status || '').toLowerCase() === 'completed') && (
+                      <div className="desc">{lang === 'es' ? 'Precio actual' : 'Current Price'}: {formatRwaPrice(Number(cur || 0), lang)}</div>
                     )}
-                    <div className="desc">{lang==='es'?'Precio de subscripción':'Subscribe Price'}: {formatMoney(price,'USD',lang)}</div>
+                    <div className="desc">{lang === 'es' ? 'Precio de subscripción' : 'Subscribe Price'}: {formatRwaPrice(price, lang)}</div>
                   </div>
-                  <div style={{ display:'grid', justifyItems:'end', alignContent:'start', gap:8 }}>
-                    <div style={{ fontSize:18, fontWeight:700, color }}>{pct}%</div>
-                    <div style={{ fontSize:14, color }}>{formatMoney(amount,'USD',lang)}</div>
-                    {!(String(o.status||'').toLowerCase()==='done' || String(o.status||'').toLowerCase()==='sold' || String(o.status||'').toLowerCase()==='filled' || String(o.status||'').toLowerCase()==='completed') ? (
-                      <button className="btn primary" onClick={()=>onSell(o)}>{lang==='es'?'Vender':'Sell'}</button>
+                  <div style={{ display: 'grid', justifyItems: 'end', alignContent: 'start', gap: 8 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color }}>{pct}%</div>
+                    <div style={{ fontSize: 14, color }}>{formatRwaPrice(amount, lang).replace('US$', '$')}</div>
+                    {!(String(o.status || '').toLowerCase() === 'done' || String(o.status || '').toLowerCase() === 'sold' || String(o.status || '').toLowerCase() === 'filled' || String(o.status || '').toLowerCase() === 'completed') ? (
+                      <button className="btn primary" onClick={() => onSell(o)}>{lang === 'es' ? 'Vender' : 'Sell'}</button>
                     ) : (
-                      <span className="tag" style={{ background: '#274a36' }}>{lang==='es'?'Completado':'Completed'}</span>
+                      <span className="tag" style={{ background: '#274a36' }}>{lang === 'es' ? 'Completado' : 'Completed'}</span>
                     )}
                   </div>
                 </div>
               </div>
             );
           })}
-          {(orders||[]).length===0 && (<div className="desc">--</div>)}
+          {(orders || []).length === 0 && (<div className="desc">--</div>)}
         </div>
       </div>
     </div>

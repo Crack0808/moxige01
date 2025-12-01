@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import Redis from 'ioredis';
+import https from 'https';
 
 const app = express();
 const PORT = Number(process.env.PORT || 5210);
@@ -3912,7 +3913,7 @@ app.get('/api/me/ipo/orders', requireAuth, (req, res) => {
 
 app.get('/api/trade/ipo/list', (req, res) => {
   try {
-    const rows = db.prepare('SELECT id, kind, name, code, subscribe_price AS subscribePrice, issue_at AS issueAt, subscribe_at AS subscribeAt, subscribe_end_at AS subscribeEndAt, list_at AS listAt, can_sell_on_listing_day AS canSellOnListingDay FROM ipo_items WHERE released = 1 ORDER BY id DESC').all();
+    const rows = db.prepare('SELECT id, kind, name, code, subscribe_price AS subscribePrice, issue_at AS issueAt, subscribe_at AS subscribeAt, subscribe_end_at AS subscribeEndAt, list_at AS listAt, can_sell_on_listing_day AS canSellOnListingDay, token_address AS tokenAddress, pair_address AS pairAddress, chain FROM ipo_items WHERE released = 1 ORDER BY id DESC').all();
     res.json({ items: rows });
   } catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
@@ -3925,7 +3926,7 @@ app.get('/api/trade/rwa/price', (req, res) => {
     const token = String(req.query.token || req.query.tokenAddress || '').trim();
     const chain = String(req.query.chain || 'base').trim();
     if (!pair && !token) return res.status(400).json({ error: 'pair_or_token_required' });
-    const https = require('https');
+    console.log(`[RWA] Price request: pair=${pair} token=${token} chain=${chain}`);
     const getJson = (url, cb) => {
       try { https.get(url, r => { let data = ''; r.on('data', c => { data += c }); r.on('end', () => { try { cb(null, JSON.parse(data || '{}')); } catch (e) { cb(e) } }); }).on('error', (e) => cb(e)); } catch (e) { cb(e) }
     };
@@ -3936,11 +3937,12 @@ app.get('/api/trade/rwa/price', (req, res) => {
           const p = j && Array.isArray(j.pairs) && j.pairs[0] ? Number(j.pairs[0].priceUsd || j.pairs[0].price || 0) : 0;
           if (Number.isFinite(p) && p > 0) return cb(null, p);
         }
+        console.log(`[RWA] Pairs failed for ${pair}: ${err?.message || 'no_data'}`);
         cb(new Error('no_pairs'))
       });
     };
     const tryTokens = (addr, cb) => {
-      const tokensUrl = `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(chain)}/${encodeURIComponent(addr)}`;
+      const tokensUrl = `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(addr)}`;
       getJson(tokensUrl, (err2, jt) => {
         if (!err2) {
           const markets = jt && Array.isArray(jt.pairs) ? jt.pairs : [];
@@ -3948,6 +3950,7 @@ app.get('/api/trade/rwa/price', (req, res) => {
           const p2 = m ? Number(m.priceUsd || m.price || 0) : 0;
           if (Number.isFinite(p2) && p2 > 0) return cb(null, p2);
         }
+        console.log(`[RWA] Tokens failed for ${addr}: ${err2?.message || 'no_data'}`);
         cb(new Error('no_tokens'))
       });
     };

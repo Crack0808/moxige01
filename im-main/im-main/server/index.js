@@ -30,23 +30,23 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }))
 app.set('trust proxy', true)
 const CSRF_COOKIE_NAME = String(process.env.IM_CSRF_COOKIE_NAME || 'csrf_token')
 const CSRF_HEADER_NAME = String(process.env.IM_CSRF_HEADER_NAME || 'x-csrf-token')
-function parseCookie(h) { const out = {}; try { String(h||'').split(';').forEach(p=>{ const i=p.indexOf('='); if(i>0){ const k=p.slice(0,i).trim(); const v=p.slice(i+1).trim(); out[k]=v; } }); } catch {} ; return out }
-function setCsrfCookieIfMissing(req, res, next) { try { const c = parseCookie(req.headers && req.headers.cookie)[CSRF_COOKIE_NAME]; if (!c) { const t = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2); const isProd = String(process.env.NODE_ENV||'').trim().toLowerCase()==='production'; const opts = { httpOnly: false, sameSite: isProd ? 'None' : 'Lax', secure: isProd, path: '/' }; res.cookie(CSRF_COOKIE_NAME, t, opts); } } catch {} ; next() }
+function parseCookie(h) { const out = {}; try { String(h || '').split(';').forEach(p => { const i = p.indexOf('='); if (i > 0) { const k = p.slice(0, i).trim(); const v = p.slice(i + 1).trim(); out[k] = v; } }); } catch { }; return out }
+function setCsrfCookieIfMissing(req, res, next) { try { const c = parseCookie(req.headers && req.headers.cookie)[CSRF_COOKIE_NAME]; if (!c) { const t = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2); const isProd = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production'; const opts = { httpOnly: false, sameSite: isProd ? 'None' : 'Lax', secure: isProd, path: '/' }; res.cookie(CSRF_COOKIE_NAME, t, opts); } } catch { }; next() }
 function csrfGuard(req, res) {
   try {
-    const m = String(req.method||'GET').toUpperCase();
-    if (!['POST','PUT','PATCH','DELETE'].includes(m)) return true;
+    const m = String(req.method || 'GET').toUpperCase();
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(m)) return true;
     const cookies = parseCookie(req.headers && req.headers.cookie);
-    const c = String(cookies[CSRF_COOKIE_NAME]||'').trim();
-    const h = String(req.headers[CSRF_HEADER_NAME]||'').trim();
-    const devBypass = String(process.env.NODE_ENV||'').trim().toLowerCase() !== 'production';
+    const c = String(cookies[CSRF_COOKIE_NAME] || '').trim();
+    const h = String(req.headers[CSRF_HEADER_NAME] || '').trim();
+    const devBypass = String(process.env.NODE_ENV || '').trim().toLowerCase() !== 'production';
     if (!c || !h || c !== h) {
       if (devBypass) return true;
-      try { res.status(403).json({ error: 'csrf_invalid' }) } catch {}
+      try { res.status(403).json({ error: 'csrf_invalid' }) } catch { }
       return false;
     }
     return true;
-  } catch (_) { try { res.status(403).json({ error: 'csrf_invalid' }) } catch {} ; return false }
+  } catch (_) { try { res.status(403).json({ error: 'csrf_invalid' }) } catch { }; return false }
 }
 app.use(setCsrfCookieIfMissing)
 function securityHeaders(req, res, next) {
@@ -58,19 +58,19 @@ function securityHeaders(req, res, next) {
     if (hsts) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
     const csp = String(process.env.CSP || '').trim()
     if (csp) res.setHeader('Content-Security-Policy', csp)
-    else if (String(process.env.NODE_ENV||'').trim().toLowerCase()==='production') res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:")
-  } catch (_) {}
+    else if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production') res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:")
+  } catch (_) { }
   next()
 }
 app.use(securityHeaders)
 app.use((req, res, next) => {
   try {
-    if (String(req.method||'GET').toUpperCase() === 'GET') {
+    if (String(req.method || 'GET').toUpperCase() === 'GET') {
       res.setHeader('Cache-Control', 'no-store')
       res.setHeader('Pragma', 'no-cache')
       res.setHeader('Expires', '0')
     }
-  } catch (_) {}
+  } catch (_) { }
   next()
 })
 const rateBuckets = new Map()
@@ -78,14 +78,14 @@ function createRateLimiter(opts) {
   const windowMs = Math.max(1000, Number((opts && opts.windowMs) || 60000))
   const max = Math.max(1, Number((opts && opts.max) || 10))
   const REDIS_URL = String(process.env.REDIS_URL || '').trim()
-  let redis = null; try { if (REDIS_URL) { const Redis = require('ioredis'); redis = new Redis(REDIS_URL) } } catch (_){ redis = null }
+  let redis = null; try { if (REDIS_URL) { const Redis = require('ioredis'); redis = new Redis(REDIS_URL) } } catch (_) { redis = null }
   if (redis) {
     return async (req, res, next) => {
       try {
         const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
         const ip = xf || req.ip || (req.connection && req.connection.remoteAddress) || 'unknown'
         const key = `ip:${ip}:rl:${windowMs}:${max}`
-        const ttl = Math.ceil(windowMs/1000)
+        const ttl = Math.ceil(windowMs / 1000)
         const val = await redis.incr(key)
         if (val === 1) await redis.expire(key, ttl)
         if (val > max) return res.status(429).json({ error: 'rate_limited' })
@@ -106,7 +106,7 @@ function createRateLimiter(opts) {
     } catch (_) { return next() }
   }
 }
-const IS_PROD = String(process.env.NODE_ENV||'').trim().toLowerCase()==='production'
+const IS_PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production'
 const rateLimitUpload = IS_PROD ? createRateLimiter({ windowMs: 60000, max: 5 }) : (req, res, next) => next()
 const rateLimitWrite = createRateLimiter({ windowMs: 60000, max: 20 })
 
@@ -118,7 +118,7 @@ app.get('/api/csrf', (req, res) => {
     let t = String(cookies[CSRF_COOKIE_NAME] || '').trim()
     if (!t) {
       t = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2)
-      const isProd = String(process.env.NODE_ENV||'').trim().toLowerCase()==='production'
+      const isProd = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production'
       const opts = { httpOnly: false, sameSite: isProd ? 'None' : 'Lax', secure: isProd, path: '/' }
       res.cookie(CSRF_COOKIE_NAME, t, opts)
     }
@@ -130,7 +130,7 @@ const IM_TOKEN = process.env.IM_TOKEN ? String(process.env.IM_TOKEN) : ''
 const server = http.createServer(app)
 const io = new Server(server, { cors: { origin: allowAllCors ? '*' : allowOrigins, credentials: true } })
 const PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production'
-if (PROD && !IM_TOKEN) { try { console.error('[im-main] IM_TOKEN is required in production') } catch (_) {} ; process.exit(1) }
+if (PROD && !IM_TOKEN) { try { console.error('[im-main] IM_TOKEN is required in production') } catch (_) { }; process.exit(1) }
 
 if (IM_TOKEN) {
   app.use((req, res, next) => {
@@ -163,16 +163,16 @@ if (IM_TOKEN) {
       const h = socket.handshake && socket.handshake.headers && socket.handshake.headers['x-im-token']
       const at = socket.handshake && socket.handshake.headers && socket.handshake.headers['x-im-agent']
       const t = String(a || q || h || '').trim()
-      const PROD = String(process.env.NODE_ENV||'').trim().toLowerCase()==='production'
+      const PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production'
       if (at) {
         db.get('SELECT id FROM agent_tokens WHERE token = ?', [String(at)], (err, row) => {
-          if (!err && row) { try { socket.data = { role: 'agent' } } catch (_) {}; return next() }
-          if (!PROD && t && t === IM_TOKEN) { try { socket.data = { role: 'agent' } } catch (_) {}; return next() }
+          if (!err && row) { try { socket.data = { role: 'agent' } } catch (_) { }; return next() }
+          if (!PROD && t && t === IM_TOKEN) { try { socket.data = { role: 'agent' } } catch (_) { }; return next() }
           return next(new Error('unauthorized'))
         })
         return
       }
-      try { socket.data = { role: 'customer' } } catch (_) {}
+      try { socket.data = { role: 'customer' } } catch (_) { }
       return next()
     } catch (_) { return next() }
   })
@@ -190,17 +190,17 @@ try {
     const raw = fs.readFileSync(memPath, 'utf8')
     const obj = JSON.parse(raw || '{}')
     if (Array.isArray(obj.messages)) mem.messages = obj.messages.map(m => ({ id: m.id, phone: m.phone, sender: m.sender, content: m.content, ts: m.ts, type: m.type || null, reply_to: m.reply_to || null }))
-    if (obj && obj.users && typeof obj.users === 'object') { mem.users = new Map(Object.entries(obj.users).map(([k,v])=>[k,{ phone:String(k), name:String(v && v.name || ''), avatar:String(v && v.avatar || ''), country:String(v && v.country || '') }])) }
+    if (obj && obj.users && typeof obj.users === 'object') { mem.users = new Map(Object.entries(obj.users).map(([k, v]) => [k, { phone: String(k), name: String(v && v.name || ''), avatar: String(v && v.avatar || ''), country: String(v && v.country || '') }])) }
     if (Number.isFinite(obj.nextId)) mem.nextId = obj.nextId
   }
-} catch (_) {}
+} catch (_) { }
 function saveMem() {
   try {
     const usersObj = {}
-    for (const [k,v] of mem.users.entries()) usersObj[k] = { name: v.name || '', avatar: v.avatar || '', country: v.country || '' }
+    for (const [k, v] of mem.users.entries()) usersObj[k] = { name: v.name || '', avatar: v.avatar || '', country: v.country || '' }
     const out = { messages: mem.messages.slice(0), users: usersObj, nextId: mem.nextId }
     fs.writeFileSync(memPath, JSON.stringify(out))
-  } catch (_) {}
+  } catch (_) { }
 }
 
 if (db) {
@@ -240,6 +240,7 @@ if (db) {
     })
     db.run('CREATE TABLE IF NOT EXISTS agent_acl (phone TEXT PRIMARY KEY)')
     db.run('CREATE TABLE IF NOT EXISTS agent_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, token TEXT)')
+    db.run('CREATE TABLE IF NOT EXISTS uploads_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, size INTEGER, mime TEXT, sha256 TEXT, ts INTEGER)')
   })
 }
 
@@ -254,8 +255,8 @@ app.get('/favicon.ico', (req, res) => {
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads')
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir)
 const pendingDir = path.join(__dirname, '..', 'data', 'pending')
-try { if (!fs.existsSync(path.join(__dirname, '..', 'data'))) fs.mkdirSync(path.join(__dirname, '..', 'data')) } catch (_) {}
-try { if (!fs.existsSync(pendingDir)) fs.mkdirSync(pendingDir) } catch (_) {}
+try { if (!fs.existsSync(path.join(__dirname, '..', 'data'))) fs.mkdirSync(path.join(__dirname, '..', 'data')) } catch (_) { }
+try { if (!fs.existsSync(pendingDir)) fs.mkdirSync(pendingDir) } catch (_) { }
 const upload = multer({
   storage: multer.diskStorage({
     destination: pendingDir,
@@ -281,13 +282,13 @@ app.get('/api/user/:phone', async (req, res) => {
     if (profile) { mem.users.set(phone, profile); saveMem(); return res.json(profile) }
     return res.status(404).json({ error: 'not_found' })
   }
-  function sanitizeCountry(v){ try { const s = String(v||'').trim(); if (!s || /undefined/i.test(s)) return ''; return s } catch { return '' } }
+  function sanitizeCountry(v) { try { const s = String(v || '').trim(); if (!s || /undefined/i.test(s)) return ''; return s } catch { return '' } }
   db.get('SELECT phone, name, avatar, country FROM users WHERE phone = ?', [phone], async (err, row) => {
     if (err) return res.status(500).json({ error: 'db_error' })
     if (row) {
       row.country = sanitizeCountry(row.country)
       if (!row.avatar) {
-        const ext = await fetchUserProfile(phone).catch(()=>null)
+        const ext = await fetchUserProfile(phone).catch(() => null)
         if (ext && (ext.avatar || ext.name || ext.country)) {
           upsertUserProfile(db, ext)
           return res.json({ phone, name: ext.name || row.name || '', avatar: ext.avatar || '', country: sanitizeCountry(ext.country || row.country || '') })
@@ -333,7 +334,7 @@ app.post('/api/user', async (req, res) => {
 app.get('/api/messages/:phone', (req, res) => {
   const phone = req.params.phone
   if (!db) {
-    const rows = mem.messages.filter(m => m.phone === phone).sort((a,b)=>a.ts-b.ts)
+    const rows = mem.messages.filter(m => m.phone === phone).sort((a, b) => a.ts - b.ts)
     return res.json(rows)
   }
   db.all('SELECT id, phone, sender, content, ts, type, reply_to, ip, country FROM messages WHERE phone = ? ORDER BY ts ASC', [phone], (err, rows) => {
@@ -370,11 +371,11 @@ app.post('/api/me/kyc/submit', (req, res) => {
   try {
     const fields = (req.body && req.body.fields) || {}
     const photos = (req.body && req.body.photos) || []
-    const name = String(fields.name||'').trim()
-    const idType = String(fields.idType||'').trim()
-    const idNumber = String(fields.idNumber||'').trim()
+    const name = String(fields.name || '').trim()
+    const idType = String(fields.idType || '').trim()
+    const idNumber = String(fields.idNumber || '').trim()
     if (!name || !idType || !idNumber || !Array.isArray(photos) || photos.length === 0) return res.status(400).json({ error: 'bad_request' })
-    const rec = { id: mem.nextId++, fields: { name, idType, idNumber }, photos: photos.slice(0,3), ts: Date.now(), status: 'submitted' }
+    const rec = { id: mem.nextId++, fields: { name, idType, idNumber }, photos: photos.slice(0, 3), ts: Date.now(), status: 'submitted' }
     if (!db) {
       mem.kyc.push(rec)
       const key = (req.headers['x-forwarded-for'] || '').toString().split(',')[0].trim() || req.ip || ''
@@ -383,7 +384,7 @@ app.post('/api/me/kyc/submit', (req, res) => {
     }
     try {
       db.run('CREATE TABLE IF NOT EXISTS kyc_submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT, name TEXT, id_type TEXT, id_number TEXT, photos TEXT, ts INTEGER, status TEXT)')
-      const photosStr = JSON.stringify(photos.slice(0,3))
+      const photosStr = JSON.stringify(photos.slice(0, 3))
       db.run('INSERT INTO kyc_submissions (phone, name, id_type, id_number, photos, ts, status) VALUES (?, ?, ?, ?, ?, ?, ?)', ['', name, idType, idNumber, photosStr, Date.now(), 'submitted'], err => {
         if (err) return res.status(500).json({ error: 'db_error' })
         res.json({ ok: true })
@@ -397,7 +398,7 @@ app.get('/api/conversations', (req, res) => {
     const phones = Array.from(new Set(mem.messages.map(m => m.phone)))
     const rows = phones.map(p => {
       const msgs = mem.messages.filter(m => m.phone === p)
-      const last = msgs[msgs.length-1]
+      const last = msgs[msgs.length - 1]
       const lastAgent = [...msgs].reverse().find(m => m.sender === 'agent')
       const unreadCount = msgs.filter(m => m.sender === 'customer').length
       const u = mem.users.get(p) || {}
@@ -467,7 +468,7 @@ app.post('/api/note', (req, res) => {
 app.get('/api/notes/:phone', (req, res) => {
   const phone = req.params.phone
   if (!db) {
-    const rows = mem.notes.filter(n => n.phone === phone).sort((a,b) => (Number(b.pinned||0) - Number(a.pinned||0)) || (b.ts - a.ts))
+    const rows = mem.notes.filter(n => n.phone === phone).sort((a, b) => (Number(b.pinned || 0) - Number(a.pinned || 0)) || (b.ts - a.ts))
     return res.json(rows)
   }
   db.all('SELECT id, phone, content, ts, pinned FROM notes WHERE phone = ? ORDER BY pinned DESC, ts DESC', [phone], (err, rows) => {
@@ -493,7 +494,7 @@ app.patch('/api/notes/:id', rateLimitWrite, (req, res) => {
   const id = req.params.id
   const { content } = req.body || {}
   if (!id || typeof content !== 'string') return res.status(400).json({ error: 'bad_request' })
-  if (!db) { const i = mem.notes.findIndex(n => String(n.id) === String(id)); if (i>=0) mem.notes[i].content = content; return res.json({ ok: true }) }
+  if (!db) { const i = mem.notes.findIndex(n => String(n.id) === String(id)); if (i >= 0) mem.notes[i].content = content; return res.json({ ok: true }) }
   db.run('UPDATE notes SET content = ? WHERE id = ?', [content, id], err => {
     if (err) return res.status(500).json({ error: 'db_error' })
     res.json({ ok: true })
@@ -505,7 +506,7 @@ app.post('/api/notes/:id/pin', rateLimitWrite, (req, res) => {
   const id = req.params.id
   const { pinned } = req.body || {}
   const val = pinned ? 1 : 0
-  if (!db) { const i = mem.notes.findIndex(n => String(n.id) === String(id)); if (i>=0) mem.notes[i].pinned = val; return res.json({ ok: true }) }
+  if (!db) { const i = mem.notes.findIndex(n => String(n.id) === String(id)); if (i >= 0) mem.notes[i].pinned = val; return res.json({ ok: true }) }
   db.run('UPDATE notes SET pinned = ? WHERE id = ?', [val, id], err => {
     if (err) return res.status(500).json({ error: 'db_error' })
     res.json({ ok: true })
@@ -536,13 +537,13 @@ function socketLimit(socket, key, opts) {
     const now = Date.now()
     const b = socketBuckets.get(bk)
     if (!b || now > b.reset) { socketBuckets.set(bk, { reset: now + windowMs, count: 1 }); return true }
-    if (b.count >= max) { try { socket.emit('rate_limited', { key }) } catch {} ; return false }
+    if (b.count >= max) { try { socket.emit('rate_limited', { key }) } catch { }; return false }
     b.count += 1; return true
   } catch { return true }
 }
 
 io.on('connection', socket => {
-  try { /* minimal connection log */ } catch {}
+  try { /* minimal connection log */ } catch { }
   socket.on('join', ({ phone }) => {
     if (!socketLimit(socket, 'join', { windowMs: 60000, customerMax: 5, agentMax: 30 })) return
     if (!phone) return
@@ -568,7 +569,7 @@ io.on('connection', socket => {
       const ip = (socket.handshake.headers['x-forwarded-for'] || '').toString().split(',')[0].trim() || socket.handshake.address || ''
       resolveCountry(ip).then(country => {
         if (country) db.run('INSERT INTO users (phone, country) VALUES (?, ?) ON CONFLICT(phone) DO UPDATE SET country=excluded.country', [phone, country])
-      }).catch(() => {})
+      }).catch(() => { })
     }
   })
   socket.on('message', payload => {
@@ -606,7 +607,7 @@ io.on('connection', socket => {
       if (idx < 0) return
       const row = mem.messages[idx]
       if (by === 'customer') { mem.messages[idx] = { ...row, type: 'recall' }; io.to(phone).emit('recalled', { phone, id, by: 'customer', content: row.content }) }
-      else { mem.messages.splice(idx,1); io.to(phone).emit('recalled', { phone, id, by: 'agent' }) }
+      else { mem.messages.splice(idx, 1); io.to(phone).emit('recalled', { phone, id, by: 'agent' }) }
       saveMem()
       return
     }
@@ -635,7 +636,7 @@ io.on('connection', socket => {
   })
   socket.on('disconnect', () => {
     const d = socket.data || {}
-    try { /* minimal disconnect log */ } catch {}
+    try { /* minimal disconnect log */ } catch { }
     if (d.role === 'customer' && d.phone) {
       const c = onlinePhones.get(d.phone) || 0
       const n = Math.max(0, c - 1)
@@ -656,17 +657,17 @@ function recomputeOnlinePhones() {
     }
     onlinePhones.clear()
     for (const [k, v] of counts.entries()) onlinePhones.set(k, v)
-  } catch {}
+  } catch { }
 }
-try { setInterval(recomputeOnlinePhones, 30000) } catch {}
+try { setInterval(recomputeOnlinePhones, 30000) } catch { }
 
 const port = process.env.PORT || 3000
-server.listen(port, () => {})
+server.listen(port, () => { })
 function encryptSnapshot() {
   try {
     const keyHex = String(process.env.IM_DB_ENC_KEY || '').trim()
     if (!keyHex || keyHex.length !== 64) return
-    const ts = new Date().toISOString().replace(/[-:]/g,'').replace('T','').slice(0,14)
+    const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '').slice(0, 14)
     const src = dbPath
     const dst = path.join(dataDir, `chat.snap.${ts}.db.enc`)
     const iv = require('crypto').randomBytes(12)
@@ -676,9 +677,9 @@ function encryptSnapshot() {
     const enc = Buffer.concat([cipher.update(data), cipher.final()])
     const tag = cipher.getAuthTag()
     fs.writeFileSync(dst, Buffer.concat([iv, enc, tag]))
-  } catch (_) {}
+  } catch (_) { }
 }
-try { setInterval(encryptSnapshot, 60*60*1000) } catch (_) {}
+try { setInterval(encryptSnapshot, 60 * 60 * 1000) } catch (_) { }
 app.get('/api/health', (req, res) => {
   try {
     res.json({ ok: true, status: 'healthy', port: Number(port), tokenEnabled: !!IM_TOKEN })
@@ -696,8 +697,8 @@ function translateDeepL(text) {
       const payload = 'text=' + encodeURIComponent(text) + '&target_lang=ZH'
       const https = require('https')
       const opt = { method: 'POST', hostname: host, port: 443, path: '/v2/translate', headers: { 'Authorization': 'DeepL-Auth-Key ' + key, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(payload) } }
-      const rq = https.request(opt, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'{}'); const t = o && o.translations && o.translations[0] && o.translations[0].text || ''; const dlang = o && o.translations && o.translations[0] && o.translations[0].detected_source_language || ''; resolve({ ok: !!t, text: t, detected: dlang }) } catch { resolve({ ok: false }) } }) })
-      rq.setTimeout(6000, () => { try { rq.destroy(new Error('timeout')) } catch {} ; resolve({ ok: false }) })
+      const rq = https.request(opt, r => { let data = ''; r.on('data', d => data += d); r.on('end', () => { try { const o = JSON.parse(data || '{}'); const t = o && o.translations && o.translations[0] && o.translations[0].text || ''; const dlang = o && o.translations && o.translations[0] && o.translations[0].detected_source_language || ''; resolve({ ok: !!t, text: t, detected: dlang }) } catch { resolve({ ok: false }) } }) })
+      rq.setTimeout(6000, () => { try { rq.destroy(new Error('timeout')) } catch { }; resolve({ ok: false }) })
       rq.on('error', () => resolve({ ok: false }))
       rq.write(payload); rq.end()
     } catch { resolve({ ok: false }) }
@@ -708,7 +709,7 @@ function translateMyMemory(text) {
     try {
       const https = require('https')
       const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=en%7Czh-CN'
-      https.get(url, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'{}'); const t = o && o.responseData && o.responseData.translatedText || ''; const dlang = o && o.responseData && o.responseData.detectedSourceLanguage || ''; resolve({ ok: !!t, text: t, detected: dlang || '' }) } catch { resolve({ ok: false }) } }) }).on('error', () => resolve({ ok: false }))
+      https.get(url, r => { let data = ''; r.on('data', d => data += d); r.on('end', () => { try { const o = JSON.parse(data || '{}'); const t = o && o.responseData && o.responseData.translatedText || ''; const dlang = o && o.responseData && o.responseData.detectedSourceLanguage || ''; resolve({ ok: !!t, text: t, detected: dlang || '' }) } catch { resolve({ ok: false }) } }) }).on('error', () => resolve({ ok: false }))
     } catch { resolve({ ok: false }) }
   })
 }
@@ -717,7 +718,7 @@ function translateGoogle(text) {
     try {
       const https = require('https')
       const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=' + encodeURIComponent(text)
-      https.get(url, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const o = JSON.parse(data||'[]'); const t = o && o[0] && o[0][0] && o[0][0][0] || ''; const dlang = o && o[2] || ''; resolve({ ok: !!t, text: t, detected: dlang || '' }) } catch { resolve({ ok: false }) } }) }).on('error', () => resolve({ ok: false }))
+      https.get(url, r => { let data = ''; r.on('data', d => data += d); r.on('end', () => { try { const o = JSON.parse(data || '[]'); const t = o && o[0] && o[0][0] && o[0][0][0] || ''; const dlang = o && o[2] || ''; resolve({ ok: !!t, text: t, detected: dlang || '' }) } catch { resolve({ ok: false }) } }) }).on('error', () => resolve({ ok: false }))
     } catch { resolve({ ok: false }) }
   })
 }
@@ -749,25 +750,24 @@ app.post('/api/upload', rateLimitUpload, upload.single('file'), (req, res) => {
   try {
     const buf = fs.readFileSync(src)
     const sha = require('crypto').createHash('sha256').update(buf).digest('hex')
-    db.run('CREATE TABLE IF NOT EXISTS uploads_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, size INTEGER, mime TEXT, sha256 TEXT, ts INTEGER)')
-    db.run('INSERT INTO uploads_audit (name, size, mime, sha256, ts) VALUES (?, ?, ?, ?, ?)', [req.file.filename, Number(req.file.size||buf.length), String(req.file.mimetype||''), sha, Date.now()])
-    const scanUrl = String(process.env.UPLOAD_SCAN_URL||'').trim()
+    db.run('INSERT INTO uploads_audit (name, size, mime, sha256, ts) VALUES (?, ?, ?, ?, ?)', [req.file.filename, Number(req.file.size || buf.length), String(req.file.mimetype || ''), sha, Date.now()])
+    const scanUrl = String(process.env.UPLOAD_SCAN_URL || '').trim()
     if (scanUrl) {
-      const payload = JSON.stringify({ name: req.file.filename, size: Number(req.file.size||buf.length), mime: String(req.file.mimetype||''), sha256: sha })
+      const payload = JSON.stringify({ name: req.file.filename, size: Number(req.file.size || buf.length), mime: String(req.file.mimetype || ''), sha256: sha })
       const http = scanUrl.startsWith('https') ? require('https') : require('http')
       const u = new URL(scanUrl)
-      const opt = { method:'POST', hostname:u.hostname, port:u.port|| (u.protocol==='https:'?443:80), path:u.pathname+u.search, headers:{ 'Content-Type':'application/json', 'Content-Length': Buffer.byteLength(payload) } }
+      const opt = { method: 'POST', hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: u.pathname + u.search, headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } }
       let responded = false
-      const done = (fn) => { if (!responded) { responded = true; try { fn() } catch {} } }
-      const rq = http.request(opt, r => { let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{ try { const obj = JSON.parse(data||'{}'); if (obj && (obj.flagged || obj.ok===false)) { try { fs.unlinkSync(src) } catch {} ; return done(()=>res.status(400).json({ error:'file_flagged' })) } } catch {} ; try { fs.renameSync(src, dst) } catch {} ; return done(()=>res.json({ url })) }) })
-      rq.on('timeout', () => { try { rq.destroy(new Error('timeout')) } catch {} ; try { fs.renameSync(src, dst) } catch {} ; done(()=>res.json({ url })) })
+      const done = (fn) => { if (!responded) { responded = true; try { fn() } catch { } } }
+      const rq = http.request(opt, r => { let data = ''; r.on('data', d => data += d); r.on('end', () => { try { const obj = JSON.parse(data || '{}'); if (obj && (obj.flagged || obj.ok === false)) { try { fs.unlinkSync(src) } catch { }; return done(() => res.status(400).json({ error: 'file_flagged' })) } } catch { }; try { fs.renameSync(src, dst) } catch { }; return done(() => res.json({ url })) }) })
+      rq.on('timeout', () => { try { rq.destroy(new Error('timeout')) } catch { }; try { fs.renameSync(src, dst) } catch { }; done(() => res.json({ url })) })
       rq.setTimeout(8000)
-      rq.on('error', () => { try { fs.renameSync(src, dst) } catch {} ; done(()=>res.json({ url })) })
+      rq.on('error', () => { try { fs.renameSync(src, dst) } catch { }; done(() => res.json({ url })) })
       rq.write(payload); rq.end();
       return
     }
-  } catch (_) {}
-  try { fs.renameSync(src, dst) } catch {} ; res.json({ url })
+  } catch (_) { }
+  try { fs.renameSync(src, dst) } catch { }; res.json({ url })
 })
 
 function scheduleUploadCleanup() {
@@ -783,12 +783,12 @@ function scheduleUploadCleanup() {
             const fp = path.join(uploadDir, f)
             const st = fs.statSync(fp)
             if (st.isFile() && (now - st.mtimeMs) > keepMs) { fs.unlinkSync(fp) }
-          } catch (_) {}
+          } catch (_) { }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     setInterval(run, 60 * 60 * 1000)
-  } catch (_) {}
+  } catch (_) { }
 }
 scheduleUploadCleanup()
 
